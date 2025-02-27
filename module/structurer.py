@@ -1,11 +1,10 @@
 import copy
-import datetime
 import os
 import sys
 import zlib
 import json
 import time
-from typing import Any, Callable
+from typing import Any
 
 from palworld_save_tools.gvas import GvasFile
 from palworld_save_tools.palsav import decompress_sav_to_gvas
@@ -18,23 +17,6 @@ import group
 from world_types import Player, Pal, Guild, BaseCamp
 from logger import log, redirect_stdout_stderr
 
-# PALWORLD_CUSTOM_PROPERTIES: dict[
-#     str,
-#     tuple[
-#         Callable[[FArchiveReader, str, int, str], dict[str, Any]],
-#         Callable[[FArchiveWriter, str, dict[str, Any]], int],
-#     ],
-# ] = {
-#     ".worldSaveData.GroupSaveDataMap": (group.decode, group.encode),
-#     ".worldSaveData.CharacterSaveParameterMap.Value.RawData": (
-#         character.decode,
-#         character.encode,
-#     ),
-#     ".worldSaveData.ItemContainerSaveData.Value.RawData": (
-#         item_container.decode,
-#         item_container.encode,
-#     ),
-# }
 PALWORLD_CUSTOM_PROPERTIES[
     ".worldSaveData.ItemContainerSaveData.Value.Slots.Slots.RawData"
 ] = (
@@ -214,7 +196,7 @@ def convert_sav(file):
     wsd = gvas_file.properties["worldSaveData"]["value"]
 
 
-def structure_player(dir_path, data_source=None):
+def structure_player(dir_path, data_source=None, filetime: int = -1):
     log("Structuring players...")
     global wsd
     if data_source is None:
@@ -231,6 +213,7 @@ def structure_player(dir_path, data_source=None):
 
     players = []
     pals = []
+    ticks = wsd["GameTimeSaveData"]["value"]["RealDateTimeTicks"]["value"]
     for uid, c in uid_character:
         if c.get("IsPlayer") and c["IsPlayer"]["value"]:
             c["Items"] = getPlayerItems(uid, dir_path)
@@ -238,7 +221,7 @@ def structure_player(dir_path, data_source=None):
         else:
             if not c.get("OwnerPlayerUId"):
                 continue
-            pals.append(Pal(c).to_dict())
+            pals.append(Pal(c, ticks, filetime).to_dict())
 
     unique_players_dict = {}
     for player in players:
