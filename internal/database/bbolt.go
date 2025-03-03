@@ -12,7 +12,7 @@ var db *bbolt.DB
 var once sync.Once
 
 func InitDB() *bbolt.DB {
-	db_, err := bbolt.Open("pst.db", 0600, &bbolt.Options{Timeout: 1 * time.Minute})
+	db_, err := bbolt.Open("./data/pst.db", 0600, &bbolt.Options{Timeout: 1 * time.Minute})
 	if err != nil {
 		logger.Panic(err)
 	}
