@@ -8,5 +8,13 @@
   "terminal.integrated.env.windows": {
     "PYTHONPATH": "${PYTHONPATH};${workspaceFolder}/module/"
   },
-  "pylint.cwd": "${workspaceFolder}/module/"
+  "pylint.cwd": "${workspaceFolder}/module/",
+  "go.goroot": "/root/.local/share/mise/installs/go/1.21.13",
+  "debug.javascript.defaultRuntimeExecutable": {
+    "pwa-node": "/root/.local/share/mise/shims/node"
+  },
+  "go.alternateTools": {
+    "go": "/root/.local/share/mise/shims/go",
+    "dlv": "/root/.local/share/mise/shims/dlv"
+  }
 }
