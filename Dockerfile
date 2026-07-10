@@ -1,3 +1,13 @@
+# --------- map resources -----------
+FROM python:3.11-alpine as mapDownloader
+
+WORKDIR /app
+
+COPY ./map_down.py /app/map_down.py
+RUN python3 /app/map_down.py \
+    --save-dir /app/map \
+    --points-file /app/points.json
+
 # --------- frontend -----------
 FROM node:22-alpine as frontendBuilder
 
@@ -15,6 +25,7 @@ COPY ./web/package.json /app/web/package.json
 RUN cd /app/web/ && pnpm i --frozen-lockfile
 
 COPY ./web /app/web
+COPY --from=mapDownloader /app/points.json /app/web/src/assets/map/points.json
 RUN cd /app/web/ && pnpm build
 
 COPY ./pal-conf/pnpm-lock.yaml /app/pal-conf/pnpm-lock.yaml
@@ -55,17 +66,6 @@ RUN mkdir -p /app/dist && \
         echo "Unsupported architecture: $TARGETARCH" && exit 1; \
     fi
 RUN chmod +x /app/dist/sav_cli
-
-# --------- map tiles -----------
-FROM python:3.11-alpine as mapDownloader
-
-WORKDIR /app
-
-RUN apk update && apk add curl unzip
-
-# https://github.com/zaigie/palworld-server-tool/releases/download/v0.9.9/map.zip
-RUN curl -L -o map.zip https://github.com/zaigie/palworld-server-tool/releases/download/v0.9.9/map.zip
-RUN unzip map.zip -d /app
 
 # --------- backend -----------
 FROM golang:1.25-alpine as backendBuilder

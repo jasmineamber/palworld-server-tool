@@ -23,7 +23,6 @@ init:
 build:
 	rm -rf dist/ && mkdir -p dist/
 
-	pip install requests tdqm
 	python3 map_down.py
 
 	rm -rf assets && rm -rf index.html && rm -rf pal-conf.html
@@ -55,7 +54,6 @@ frontend:
 build-pub:
 	rm -rf dist/ && mkdir -p dist/
 
-	pip install requests tdqm
 	python3 map_down.py
 
 	rm -rf assets && rm -rf index.html && rm -rf pal-conf.html

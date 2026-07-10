@@ -17,6 +17,8 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - name: Test map resource tooling
+        run: python3 -m unittest test_map_down.py
       - name: Test backend packages
         run: go test ./...
       - name: Vet backend packages

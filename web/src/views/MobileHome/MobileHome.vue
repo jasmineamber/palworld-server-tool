@@ -1,16 +1,19 @@
 <script setup>
 import {
   AdminPanelSettingsOutlined,
+  CloudDownloadOutlined,
+  SaveOutlined,
   SupervisedUserCircleRound,
   SettingsPowerRound,
 } from "@vicons/material";
 import { ChevronsLeft } from "@vicons/tabler";
-import { GameController, LanguageSharp } from "@vicons/ionicons5";
+import { GameController, LanguageSharp, Settings } from "@vicons/ionicons5";
 import { BroadcastTower } from "@vicons/fa";
-import { onMounted, ref } from "vue";
-import { NTag, NButton, useMessage, useDialog } from "naive-ui";
+import { computed, h, onMounted, ref } from "vue";
+import { NIcon, NTag, NButton, useMessage, useDialog } from "naive-ui";
 import { useI18n } from "vue-i18n";
 import ApiService from "@/service/api";
+import dayjs from "dayjs";
 import palMap from "@/assets/pal.json";
 import skillMap from "@/assets/skill.json";
 import PlayerDetail from "./component/PlayerDetail.vue";
@@ -231,36 +234,244 @@ const handleBroadcast = async () => {
   }
 };
 
-//shutdown
-const doShutdown = async () => {
-  return await new ApiService().shutdownServer({
-    seconds: 60,
-    message: "Server Will Shutdown After 60 Seconds",
+const showServerSettingsModal = ref(false);
+const serverSettingsLoading = ref(false);
+const serverSettingsRows = ref([]);
+const serverSettingsColumns = computed(() => [
+  {
+    title: t("item.settingName"),
+    key: "name",
+    width: 180,
+    ellipsis: { tooltip: true },
+  },
+  {
+    title: t("item.settingValue"),
+    key: "value",
+    ellipsis: { tooltip: true },
+  },
+]);
+const formatSettingValue = (value) => {
+  if (value === null || value === undefined) return "--";
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+};
+const handleServerSettings = async () => {
+  if (!checkAuthToken()) {
+    message.error(t("message.requireauth"));
+    showLoginModal.value = true;
+    return;
+  }
+
+  showServerSettingsModal.value = true;
+  serverSettingsLoading.value = true;
+  const { data, statusCode } = await new ApiService().getServerSettings();
+  if (statusCode.value === 200) {
+    serverSettingsRows.value = Object.entries(data.value || {})
+      .map(([name, value]) => ({ name, value: formatSettingValue(value) }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  } else {
+    serverSettingsRows.value = [];
+    message.error(t("message.settingsfail", { err: data.value?.error }));
+  }
+  serverSettingsLoading.value = false;
+};
+
+const showWorldSnapshotModal = ref(false);
+const worldSnapshotLoading = ref(false);
+const worldSnapshot = ref(null);
+const worldActorRows = computed(() => {
+  return Array.isArray(worldSnapshot.value?.ActorData)
+    ? worldSnapshot.value.ActorData
+    : [];
+});
+const worldSnapshotColumns = computed(() => [
+  {
+    title: t("item.actorType"),
+    key: "Type",
+    width: 130,
+    ellipsis: { tooltip: true },
+  },
+  {
+    title: t("item.actorName"),
+    key: "NickName",
+    minWidth: 160,
+    ellipsis: { tooltip: true },
+    render(row) {
+      return (
+        row.NickName ||
+        row.TrainerNickName ||
+        row.GuildName ||
+        row.Class ||
+        "--"
+      );
+    },
+  },
+  {
+    title: t("pal.level"),
+    key: "level",
+    width: 70,
+  },
+]);
+const handleWorldSnapshot = async () => {
+  if (!checkAuthToken()) {
+    message.error(t("message.requireauth"));
+    showLoginModal.value = true;
+    return;
+  }
+
+  showWorldSnapshotModal.value = true;
+  worldSnapshotLoading.value = true;
+  const { data, statusCode } = await new ApiService().getWorldActorSnapshot();
+  if (statusCode.value === 200) {
+    worldSnapshot.value = data.value;
+  } else {
+    worldSnapshot.value = null;
+    message.error(t("message.snapshotfail", { err: data.value?.error }));
+  }
+  worldSnapshotLoading.value = false;
+};
+const downloadWorldSnapshot = () => {
+  if (!worldSnapshot.value) return;
+
+  const content = JSON.stringify(worldSnapshot.value, null, 2);
+  const url = URL.createObjectURL(
+    new Blob([content], { type: "application/json;charset=utf-8" }),
+  );
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `palworld-world-snapshot-${dayjs().format(
+    "YYYYMMDD-HHmmss",
+  )}.json`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+  message.success(t("message.snapshotdownloadsuccess"));
+};
+
+const handleSaveWorld = () => {
+  if (!checkAuthToken()) {
+    message.error(t("message.requireauth"));
+    showLoginModal.value = true;
+    return;
+  }
+  dialog.warning({
+    title: t("message.warn"),
+    content: t("message.saveworldtip"),
+    positiveText: t("button.confirm"),
+    negativeText: t("button.cancel"),
+    onPositiveClick: async () => {
+      const { data, statusCode } = await new ApiService().saveWorld();
+      if (statusCode.value === 200) {
+        message.success(t("message.saveworldsuccess"));
+      } else {
+        message.error(t("message.saveworldfail", { err: data.value?.error }));
+      }
+    },
   });
 };
 
+const handleForceStop = () => {
+  if (!checkAuthToken()) {
+    message.error(t("message.requireauth"));
+    showLoginModal.value = true;
+    return;
+  }
+  dialog.error({
+    title: t("message.warn"),
+    content: t("message.forcestoptip"),
+    positiveText: t("button.confirm"),
+    negativeText: t("button.cancel"),
+    onPositiveClick: async () => {
+      const { data, statusCode } = await new ApiService().stopServer();
+      if (statusCode.value === 200) {
+        message.success(t("message.forcestopsuccess"));
+      } else {
+        message.error(t("message.forcestopfail", { err: data.value?.error }));
+      }
+    },
+  });
+};
+
+const showShutdownModal = ref(false);
+const shutdownSeconds = ref(60);
+const shutdownMessage = ref("");
+const shutdownSubmitting = ref(false);
 const handleShutdown = () => {
   if (checkAuthToken()) {
-    dialog.warning({
-      title: t("message.warn"),
-      content: t("message.shutdowntip"),
-      positiveText: t("button.confirm"),
-      negativeText: t("button.cancel"),
-      onPositiveClick: async () => {
-        const { data, statusCode } = await doShutdown();
-        if (statusCode.value === 200) {
-          message.success(t("message.shutdownsuccess"));
-          return;
-        } else {
-          message.error(t("message.shutdownfail", { err: data.value?.error }));
-        }
-      },
-      onNegativeClick: () => {},
-    });
+    shutdownSeconds.value = 60;
+    shutdownMessage.value = "";
+    showShutdownModal.value = true;
   } else {
     message.error(t("message.requireauth"));
     showLoginModal.value = true;
   }
+};
+const confirmShutdown = async () => {
+  if (!Number.isInteger(shutdownSeconds.value) || shutdownSeconds.value < 1) {
+    message.error(t("message.shutdowninvalid"));
+    return;
+  }
+
+  shutdownSubmitting.value = true;
+  const { data, statusCode } = await new ApiService().shutdownServer({
+    seconds: shutdownSeconds.value,
+    message: shutdownMessage.value,
+  });
+  shutdownSubmitting.value = false;
+  if (statusCode.value === 200) {
+    message.success(t("message.shutdownsuccess"));
+    showShutdownModal.value = false;
+  } else {
+    message.error(t("message.shutdownfail", { err: data.value?.error }));
+  }
+};
+
+const renderControlIcon = (icon, color) => {
+  return () => h(NIcon, { color }, { default: () => h(icon) });
+};
+const mobileControlOptions = computed(() => [
+  {
+    label: t("button.broadcast"),
+    key: "broadcast",
+    icon: renderControlIcon(BroadcastTower),
+  },
+  {
+    label: t("button.serverSettings"),
+    key: "settings",
+    icon: renderControlIcon(Settings),
+  },
+  {
+    label: t("button.worldSnapshot"),
+    key: "snapshot",
+    icon: renderControlIcon(CloudDownloadOutlined),
+  },
+  {
+    label: t("button.saveWorld"),
+    key: "save",
+    icon: renderControlIcon(SaveOutlined, "#18a058"),
+  },
+  {
+    label: t("button.shutdown"),
+    key: "shutdown",
+    icon: renderControlIcon(SettingsPowerRound, "#d97706"),
+  },
+  {
+    label: t("button.forceStop"),
+    key: "stop",
+    icon: renderControlIcon(SettingsPowerRound, "#cc2d48"),
+  },
+]);
+const handleMobileControl = (key) => {
+  const handlers = {
+    broadcast: handleStartBrodcast,
+    settings: handleServerSettings,
+    snapshot: handleWorldSnapshot,
+    save: handleSaveWorld,
+    shutdown: handleShutdown,
+    stop: handleForceStop,
+  };
+  handlers[key]?.();
 };
 
 const toPlayers = async () => {
@@ -443,37 +654,25 @@ onMounted(async () => {
             bordered
           >
             <div v-if="isLogin" class="flex justify-center items-center px-3">
-              <n-button
-                size="small"
-                type="success"
-                class="mr-2"
-                secondary
-                strong
-                round
-                @click="handleStartBrodcast"
+              <n-dropdown
+                trigger="click"
+                :options="mobileControlOptions"
+                @select="handleMobileControl"
               >
-                <template #icon>
-                  <n-icon>
-                    <BroadcastTower />
-                  </n-icon>
-                </template>
-                {{ $t("button.broadcast") }}
-              </n-button>
-              <n-button
-                size="small"
-                type="error"
-                secondary
-                strong
-                round
-                @click="handleShutdown"
-              >
-                <template #icon>
-                  <n-icon>
-                    <SettingsPowerRound />
-                  </n-icon>
-                </template>
-                {{ $t("button.shutdown") }}
-              </n-button>
+                <n-button
+                  size="small"
+                  type="primary"
+                  class="w-full"
+                  secondary
+                  strong
+                  round
+                >
+                  <template #icon>
+                    <n-icon><Settings /></n-icon>
+                  </template>
+                  {{ $t("button.controlCenter") }}
+                </n-button>
+              </n-dropdown>
             </div>
             <div v-else></div>
             <div class="flex justify-end">
@@ -637,6 +836,137 @@ onMounted(async () => {
         <n-button class="ml-3 w-40" type="primary" @click="handleBroadcast">{{
           $t("button.confirm")
         }}</n-button>
+      </div>
+    </template>
+  </n-modal>
+
+  <n-modal
+    v-model:show="showServerSettingsModal"
+    class="custom-card"
+    preset="card"
+    style="width: 94%; max-width: 700px"
+    content-style="padding: 12px;"
+    header-style="padding: 12px;"
+    :title="$t('modal.serverSettings')"
+    size="huge"
+    :bordered="false"
+    :segmented="segmented"
+  >
+    <n-spin :show="serverSettingsLoading">
+      <n-data-table
+        :columns="serverSettingsColumns"
+        :data="serverSettingsRows"
+        :max-height="520"
+        :single-line="false"
+        virtual-scroll
+      />
+    </n-spin>
+  </n-modal>
+
+  <n-modal
+    v-model:show="showWorldSnapshotModal"
+    class="custom-card"
+    preset="card"
+    style="width: 96%; max-width: 760px"
+    content-style="padding: 12px;"
+    header-style="padding: 12px;"
+    :title="$t('modal.worldSnapshot')"
+    size="huge"
+    :bordered="false"
+    :segmented="segmented"
+  >
+    <n-spin :show="worldSnapshotLoading">
+      <n-descriptions
+        v-if="worldSnapshot"
+        bordered
+        label-placement="top"
+        :column="2"
+        class="mb-3"
+      >
+        <n-descriptions-item :label="$t('item.time')">
+          {{ worldSnapshot.Time || "--" }}
+        </n-descriptions-item>
+        <n-descriptions-item :label="$t('item.serverFps')">
+          {{ worldSnapshot.FPS ?? "--" }}
+        </n-descriptions-item>
+        <n-descriptions-item :label="$t('item.averageFps')">
+          {{ worldSnapshot.AverageFPS ?? "--" }}
+        </n-descriptions-item>
+        <n-descriptions-item :label="$t('item.actorCount')">
+          {{ worldActorRows.length }}
+        </n-descriptions-item>
+      </n-descriptions>
+      <n-data-table
+        v-if="worldSnapshot"
+        :columns="worldSnapshotColumns"
+        :data="worldActorRows"
+        :max-height="420"
+        :single-line="false"
+        virtual-scroll
+      />
+      <n-empty v-else-if="!worldSnapshotLoading" />
+    </n-spin>
+    <template #footer>
+      <div class="flex justify-end">
+        <n-button
+          type="primary"
+          :disabled="!worldSnapshot"
+          @click="downloadWorldSnapshot"
+        >
+          <template #icon>
+            <n-icon><CloudDownloadOutlined /></n-icon>
+          </template>
+          {{ $t("button.downloadSnapshot") }}
+        </n-button>
+      </div>
+    </template>
+  </n-modal>
+
+  <n-modal
+    v-model:show="showShutdownModal"
+    class="custom-card"
+    preset="card"
+    style="width: 94%; max-width: 560px"
+    content-style="padding: 12px;"
+    footer-style="padding: 12px;"
+    header-style="padding: 12px;"
+    :title="$t('modal.shutdown')"
+    size="huge"
+    :bordered="false"
+    :segmented="segmented"
+  >
+    <n-form label-placement="top">
+      <n-form-item :label="$t('input.shutdownSeconds')">
+        <n-input-number
+          v-model:value="shutdownSeconds"
+          class="w-full"
+          :min="1"
+          :max="86400"
+          :precision="0"
+        />
+      </n-form-item>
+      <n-form-item :label="$t('input.shutdownMessage')">
+        <n-input
+          v-model:value="shutdownMessage"
+          type="textarea"
+          :autosize="{ minRows: 3, maxRows: 6 }"
+          :placeholder="$t('input.shutdownMessagePlaceholder')"
+        />
+      </n-form-item>
+    </n-form>
+    <template #footer>
+      <div class="flex justify-end">
+        <n-button type="tertiary" @click="showShutdownModal = false">
+          {{ $t("button.cancel") }}
+        </n-button>
+        <n-button
+          class="ml-3"
+          type="warning"
+          :loading="shutdownSubmitting"
+          @click="confirmShutdown"
+        >
+          {{ $t("button.shutdown") }}
+        </n-button>
       </div>
     </template>
   </n-modal>

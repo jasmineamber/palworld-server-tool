@@ -18,13 +18,21 @@ import IconFastTravel from "@/assets/map/fast_travel.webp";
 import playerToGuildStore from "@/stores/model/playerToGuild.js";
 import points from "@/assets/map/points.json";
 
-const LAND_SCAPE = [447900, 708920, -999940, -738920];
+const LANDSCAPE = {
+  maxX: 349400,
+  maxY: 724400,
+  minX: -1099400,
+  minY: -724400,
+};
+const MAP_SIZE = 512;
+const MAX_ZOOM = 8;
+const MAX_NATIVE_ZOOM = 4;
 
 const api = new ApiService();
 
 const mousePosition = ref([0, 0]);
-const zoom = ref(2);
-const tiles = ref("map/tiles/{z}/{x}/{y}.png");
+const zoom = ref(1);
+const tiles = ref("map/tiles/{z}/{x}/{y}.webp");
 const playerList = ref([]);
 const guildList = ref([]);
 const showPlayer = ref(true);
@@ -35,20 +43,28 @@ const showFastTravel = ref(false);
 let timer = null;
 
 const toMapPosition = (position) => {
-  // hack
-  if (position[0] >= -256 && position[0] <= 256) {
-    return position;
-  }
   const x =
-    -256 +
-    (256 * (position[0] - LAND_SCAPE[2])) / (LAND_SCAPE[0] - LAND_SCAPE[2]);
+    -MAP_SIZE +
+    (MAP_SIZE * (position[0] - LANDSCAPE.minX)) /
+      (LANDSCAPE.maxX - LANDSCAPE.minX);
   const y =
-    (256 * (position[1] - LAND_SCAPE[3])) / (LAND_SCAPE[1] - LAND_SCAPE[3]);
+    (MAP_SIZE * (position[1] - LANDSCAPE.minY)) /
+    (LANDSCAPE.maxY - LANDSCAPE.minY);
   return [x, y];
 };
 
 const toMapDistance = (distance) => {
-  return 256 * (distance / (LAND_SCAPE[0] - LAND_SCAPE[2]));
+  return MAP_SIZE * (distance / (LANDSCAPE.maxX - LANDSCAPE.minX));
+};
+
+const fromMapPosition = (position) => {
+  const x =
+    ((position[0] + MAP_SIZE) * (LANDSCAPE.maxX - LANDSCAPE.minX)) / MAP_SIZE +
+    LANDSCAPE.minX;
+  const y =
+    (position[1] * (LANDSCAPE.maxY - LANDSCAPE.minY)) / MAP_SIZE +
+    LANDSCAPE.minY;
+  return [x.toFixed(0), y.toFixed(0)];
 };
 
 const ToPlayers = async (uid) => {
@@ -71,15 +87,12 @@ const refreshPlayer = async () => {
 };
 
 const onMapMouseMove = (event) => {
-  mousePosition.value = [
-    event.latlng.lat.toFixed(2),
-    event.latlng.lng.toFixed(2),
-  ];
+  mousePosition.value = fromMapPosition([event.latlng.lat, event.latlng.lng]);
 };
 
 // 左下角控件
 const onAddZoom = () => {
-  if (zoom.value !== 6) {
+  if (zoom.value !== MAX_ZOOM) {
     zoom.value += 1;
   }
 };
@@ -115,9 +128,9 @@ onUnmounted(async () => {
       crs="Simple"
       v-model:zoom="zoom"
       :use-global-leaflet="false"
-      :center="[-128, 128]"
+      :center="[-256, 256]"
       :min-zoom="0"
-      :max-zoom="6"
+      :max-zoom="MAX_ZOOM"
       :options="{ zoomControl: false, attributionControl: false }"
       @mousemove="onMapMouseMove"
     >
@@ -128,8 +141,10 @@ onUnmounted(async () => {
         :options="{
           bounds: [
             [0, 0],
-            [-256, 256],
+            [-MAP_SIZE, MAP_SIZE],
           ],
+          tileSize: 512,
+          maxNativeZoom: MAX_NATIVE_ZOOM,
         }"
       ></l-tile-layer>
       <template v-if="showFastTravel">
@@ -215,7 +230,7 @@ onUnmounted(async () => {
           :height="4"
           :step="1"
           :min="0"
-          :max="6"
+          :max="MAX_ZOOM"
           vertical
         />
         <n-icon

@@ -1,167 +1,237 @@
+#!/usr/bin/env python3
+
 import argparse
-import asyncio
+import concurrent.futures
 import json
 import os
+from pathlib import Path
+import time
+import urllib.error
+import urllib.request
 
-import aiohttp
-import js2py
-import requests
-from tqdm import tqdm
 
-# 重试次数常量
 RETRY_TIMES = 3
+DEFAULT_WORKERS = 16
+DEFAULT_TIMEOUT = 30
+DEFAULT_TILE_URL = "https://cdn.paldb.cc/image/map8/z{z}x{x}y{y}.webp"
+DEFAULT_MAP_DATA_URL = "https://paldb.cc/js/map_data_cn.js"
+DEFAULT_SAVE_DIR = Path("./map")
+DEFAULT_POINTS_FILE = Path("web/src/assets/map/points.json")
+MAX_NATIVE_ZOOM = 4
+USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131 Safari/537.36"
+)
 
-# 设置图片下载 URL 模板
-base_url = "https://palworld.gg/images/tiles/{z}/{x}/{y}.png"
-
-# 本地保存文件的根目录
-save_dir = "./map"
-
-# 为图片请求设置 headers
-headers = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36"
-}
-
-# 根据z的值设置x和y的最大范围
-z_to_range = {
-    0: (0, 0),  # z=0, x/y max=0
-    1: (1, 1),  # z=1, x/y max=1
-    2: (3, 3),  # z=2, x/y max=3
-    3: (7, 7),  # z=3, x/y max=7
-    4: (15, 15),  # z=4, x/y max=15
-    5: (31, 31),  # z=5, x/y max=31
-    6: (63, 63),  # z=6, x/y max=63
-}
+# PalDB stores fixed locations in its in-game map coordinate system. These are
+# the inverse of the transform used by the current PalDB map client.
+PALDB_WORLD_UNITS_PER_IPOS = 459
+PALDB_WORLD_X_OFFSET = -123_888
+PALDB_WORLD_Y_OFFSET = 158_000
 
 
-async def download_image(session, url, file_path, custom_headers, progress_bar, redown):
-    # 检查本地文件是否已经存在
-    if os.path.exists(file_path) and not redown:
-        progress_bar.update(1)
-        return
-
-    # 尝试下载图片
-    attempt = 0
-    success = False
-    while attempt < RETRY_TIMES:
+def fetch_bytes(url, timeout=DEFAULT_TIMEOUT):
+    request = urllib.request.Request(
+        url,
+        headers={
+            "User-Agent": USER_AGENT,
+            "Referer": "https://paldb.cc/",
+        },
+    )
+    last_error = None
+    for attempt in range(1, RETRY_TIMES + 1):
         try:
-            async with session.get(url, headers=custom_headers) as response:
-                # 检查响应状态码
-                if response.status == 200:
-                    # 将图片内容保存到本地
-                    with open(file_path, "wb") as f:
-                        f.write(await response.read())
-                    success = True
-                    break  # 成功下载后退出重试循环
-                elif response.status == 404:
-                    print(f"Skipped {url} - Not Found (404)")
-                    break  # 404 不重试
-                elif response.status == 403:
-                    print(f"Skipped {url} - Forbidden (403)")
-                    break  # 403 不重试
-                else:
-                    print(f"Failed to download {url} (status code: {response.status})")
-                    break  # 其他错误码不重试
-        except Exception as e:
-            print(f"Error downloading {url}: {e}")
-        attempt += 1
-        if attempt < RETRY_TIMES:
-            print(f"Retrying ({attempt}/{RETRY_TIMES}) for {url}")
-            await asyncio.sleep(1)  # 重试前等待 1 秒
-
-    # 更新进度条
-    if success:
-        progress_bar.update(1)
-    else:
-        print(f"Failed to download {url} after {RETRY_TIMES} attempts")
-        progress_bar.update(1)  # 即使失败也更新进度条
+            with urllib.request.urlopen(request, timeout=timeout) as response:
+                return response.read()
+        except (OSError, urllib.error.URLError) as error:
+            last_error = error
+            if attempt < RETRY_TIMES:
+                time.sleep(attempt)
+    raise RuntimeError(f"failed to download {url}: {last_error}")
 
 
-async def download_images_async(redown=False):
-    # 计算总图片数
-    total_images = sum(
-        (x_max + 1) * (y_max + 1) for x_max, y_max in z_to_range.values()
+def atomic_write(path, content):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path = path.with_name(f"{path.name}.tmp")
+    with temporary_path.open("wb") as file:
+        file.write(content)
+    os.replace(temporary_path, path)
+
+
+def is_webp(content):
+    return (
+        len(content) >= 12
+        and content[:4] == b"RIFF"
+        and content[8:12] == b"WEBP"
     )
 
-    # 初始化 tqdm 进度条
-    progress_bar = tqdm(total=total_images, desc="Downloading images", unit="img")
 
-    async with aiohttp.ClientSession() as session:
-        tasks = []
-        # 遍历 z, x, y 的范围
-        for z, (x_max, y_max) in z_to_range.items():
-            for x in range(0, x_max + 1):
-                for y in range(0, y_max + 1):
-                    # 构造图片的 URL
-                    url = base_url.format(z=z, x=x, y=y)
-                    # 构造本地保存的文件路径
-                    save_path = os.path.join(save_dir, str(z), str(x))
-                    file_name = f"{y}.png"
-                    file_path = os.path.join(save_path, file_name)
-
-                    # 如果文件路径不存在则创建
-                    os.makedirs(save_path, exist_ok=True)
-
-                    # 创建任务
-                    task = download_image(
-                        session, url, file_path, headers, progress_bar, redown
-                    )
-                    tasks.append(task)
-
-        # 等待所有任务完成
-        await asyncio.gather(*tasks)
-
-    progress_bar.close()
+def tile_jobs(save_dir, base_url):
+    for zoom in range(MAX_NATIVE_ZOOM + 1):
+        tile_count = 2**zoom
+        for x in range(tile_count):
+            for y in range(tile_count):
+                yield (
+                    base_url.format(z=zoom, x=x, y=y),
+                    save_dir / str(zoom) / str(x) / f"{y}.webp",
+                )
 
 
-def parse_js_file():
-    # 下载JavaScript文件
-    url = "https://paldb.cc/js/map_data_cn.js"
-    response = requests.get(url, timeout=10)
-    with open("map_data_cn.js", "wb") as file:
-        file.write(response.content)
+def download_tile(job, redownload=False, timeout=DEFAULT_TIMEOUT):
+    url, path = job
+    if path.exists() and not redownload:
+        return "cached", path
 
-    # 读取JavaScript文件内容
-    with open("map_data_cn.js", "r", encoding="utf-8") as file:
-        js_content = file.read()
+    content = fetch_bytes(url, timeout=timeout)
+    if not is_webp(content):
+        raise RuntimeError(f"downloaded tile is not WebP: {url}")
+    atomic_write(path, content)
+    return "downloaded", path
 
-    # 使用js2py执行JavaScript代码
-    context = js2py.EvalJs()
-    context.execute(js_content)
 
-    # 提取变量并转换为Python字典
-    fixed_dungeon_obj = context.fixedDungeon.to_dict()
-    fixed_dungeon = list(fixed_dungeon_obj.values())
+def download_tiles(
+    save_dir,
+    base_url=DEFAULT_TILE_URL,
+    redownload=False,
+    workers=DEFAULT_WORKERS,
+    timeout=DEFAULT_TIMEOUT,
+):
+    jobs = list(tile_jobs(save_dir, base_url))
+    completed = 0
+    downloaded = 0
+    failures = []
 
-    # 初始化结果字典
-    result = {"boss_tower": [], "fast_travel": []}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
+        futures = {
+            executor.submit(download_tile, job, redownload, timeout): job
+            for job in jobs
+        }
+        for future in concurrent.futures.as_completed(futures):
+            completed += 1
+            try:
+                status, _ = future.result()
+                if status == "downloaded":
+                    downloaded += 1
+            except Exception as error:  # noqa: BLE001
+                failures.append(str(error))
+            if completed % 25 == 0 or completed == len(jobs):
+                print(f"Map tiles: {completed}/{len(jobs)}", flush=True)
 
-    # 过滤数据并格式化
-    for item in fixed_dungeon:
-        if item["type"] == "Tower":
-            result["boss_tower"].append(
-                [float(item["pos"]["X"]), float(item["pos"]["Y"])]
-            )
-        elif item["type"] == "Fast Travel":
-            result["fast_travel"].append(
-                [float(item["pos"]["X"]), float(item["pos"]["Y"])]
-            )
+    if failures:
+        preview = "\n".join(failures[:10])
+        raise RuntimeError(f"failed to download {len(failures)} map tiles:\n{preview}")
 
-    # 将结果转换为JSON格式并保存
-    with open("web/src/assets/map/points.json", "w", encoding="utf-8") as json_file:
-        json.dump(result, json_file, ensure_ascii=False, indent=4)
+    print(
+        f"Map tiles ready: {len(jobs)} total, {downloaded} downloaded, "
+        f"{len(jobs) - downloaded} cached"
+    )
+
+
+def extract_json_assignment(script, variable_name):
+    marker = f"var {variable_name} = "
+    marker_index = script.find(marker)
+    if marker_index < 0:
+        raise ValueError(f"{variable_name} assignment was not found")
+    value_index = marker_index + len(marker)
+    value, _ = json.JSONDecoder().raw_decode(script[value_index:])
+    return value
+
+
+def ipos_to_world(ipos):
+    x = float(ipos["Y"]) * PALDB_WORLD_UNITS_PER_IPOS + PALDB_WORLD_X_OFFSET
+    y = float(ipos["X"]) * PALDB_WORLD_UNITS_PER_IPOS + PALDB_WORLD_Y_OFFSET
+    return [round(x, 3), round(y, 3)]
+
+
+def build_points(fixed_locations):
+    points = {"boss_tower": [], "fast_travel": []}
+    seen = {"boss_tower": set(), "fast_travel": set()}
+    type_to_key = {"Tower": "boss_tower", "Fast Travel": "fast_travel"}
+
+    for location in fixed_locations:
+        key = type_to_key.get(location.get("type"))
+        ipos = location.get("ipos")
+        if key is None or not isinstance(ipos, dict):
+            continue
+        if "X" not in ipos or "Y" not in ipos:
+            continue
+
+        position = ipos_to_world(ipos)
+        identity = tuple(position)
+        if identity in seen[key]:
+            continue
+        seen[key].add(identity)
+        points[key].append(position)
+
+    return points
+
+
+def refresh_points(
+    points_file,
+    map_data_url=DEFAULT_MAP_DATA_URL,
+    timeout=DEFAULT_TIMEOUT,
+):
+    script = fetch_bytes(map_data_url, timeout=timeout).decode("utf-8")
+    fixed_locations = extract_json_assignment(script, "fixedDungeon")
+    if not isinstance(fixed_locations, list):
+        raise ValueError("fixedDungeon must be an array")
+
+    points = build_points(fixed_locations)
+    if not points["boss_tower"] or not points["fast_travel"]:
+        raise ValueError("PalDB map data did not contain required map points")
+
+    content = (json.dumps(points, ensure_ascii=False, indent=2) + "\n").encode(
+        "utf-8"
+    )
+    atomic_write(points_file, content)
+    print(
+        "Map points ready: "
+        f"{len(points['boss_tower'])} towers, "
+        f"{len(points['fast_travel'])} fast travel points"
+    )
+    return points
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Download current PalDB map tiles and marker data"
+    )
+    parser.add_argument("--redownload", action="store_true")
+    parser.add_argument("--skip-tiles", action="store_true")
+    parser.add_argument("--skip-points", action="store_true")
+    parser.add_argument("--workers", type=int, default=DEFAULT_WORKERS)
+    parser.add_argument("--timeout", type=int, default=DEFAULT_TIMEOUT)
+    parser.add_argument("--save-dir", type=Path, default=DEFAULT_SAVE_DIR)
+    parser.add_argument("--points-file", type=Path, default=DEFAULT_POINTS_FILE)
+    parser.add_argument("--tile-base-url", default=DEFAULT_TILE_URL)
+    parser.add_argument("--map-data-url", default=DEFAULT_MAP_DATA_URL)
+    args = parser.parse_args()
+    if args.skip_tiles and args.skip_points:
+        parser.error("at least one of tiles or points must be refreshed")
+    if args.workers < 1:
+        parser.error("workers must be positive")
+    if args.timeout < 1:
+        parser.error("timeout must be positive")
+    return args
+
+
+def main():
+    args = parse_args()
+    if not args.skip_tiles:
+        download_tiles(
+            args.save_dir,
+            base_url=args.tile_base_url,
+            redownload=args.redownload,
+            workers=args.workers,
+            timeout=args.timeout,
+        )
+    if not args.skip_points:
+        refresh_points(
+            args.points_file,
+            map_data_url=args.map_data_url,
+            timeout=args.timeout,
+        )
 
 
 if __name__ == "__main__":
-    # 添加命令行参数解析
-    parser = argparse.ArgumentParser(description="Download tiles from palworld.gg")
-    parser.add_argument(
-        "--redown", action="store_true", help="Redownload existing files"
-    )
-    args = parser.parse_args()
-
-    # 运行异步下载
-    asyncio.run(download_images_async(args.redown))
-
-    # # 解析JavaScript文件
-    # parse_js_file()
+    main()

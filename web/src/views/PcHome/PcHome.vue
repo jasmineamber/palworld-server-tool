@@ -363,6 +363,15 @@ const controlCenterOption = [
   {
     label: () => {
       return h("div", null, {
+        default: () => t("button.worldSnapshot"),
+      });
+    },
+    key: "snapshot",
+    icon: renderIcon(CloudDownloadOutlined),
+  },
+  {
+    label: () => {
+      return h("div", null, {
         default: () => t("button.whitelist"),
       });
     },
@@ -432,6 +441,8 @@ const handleSelectControlCenter = (key) => {
     toPalConf();
   } else if (key === "settings") {
     handleServerSettings();
+  } else if (key === "snapshot") {
+    handleWorldSnapshot();
   } else if (key === "whitelist") {
     handleWhiteList();
   } else if (key === "rcon") {
@@ -571,7 +582,7 @@ const handleBroadcast = async () => {
 const showServerSettingsModal = ref(false);
 const serverSettingsLoading = ref(false);
 const serverSettingsRows = ref([]);
-const serverSettingsColumns = [
+const serverSettingsColumns = computed(() => [
   {
     title: t("item.settingName"),
     key: "name",
@@ -583,7 +594,7 @@ const serverSettingsColumns = [
     key: "value",
     ellipsis: { tooltip: true },
   },
-];
+]);
 const formatSettingValue = (value) => {
   if (value === null || value === undefined) return "--";
   if (typeof value === "object") return JSON.stringify(value);
@@ -608,6 +619,105 @@ const handleServerSettings = async () => {
     message.error(t("message.settingsfail", { err: data.value?.error }));
   }
   serverSettingsLoading.value = false;
+};
+
+const showWorldSnapshotModal = ref(false);
+const worldSnapshotLoading = ref(false);
+const worldSnapshot = ref(null);
+const worldActorRows = computed(() => {
+  return Array.isArray(worldSnapshot.value?.ActorData)
+    ? worldSnapshot.value.ActorData
+    : [];
+});
+const formatActorLocation = (row) => {
+  const coordinates = [row.LocationX, row.LocationY, row.LocationZ];
+  if (coordinates.every((value) => value === undefined || value === null)) {
+    return "--";
+  }
+  return coordinates
+    .map((value) =>
+      typeof value === "number" ? Math.round(value).toString() : "--",
+    )
+    .join(", ");
+};
+const worldSnapshotColumns = computed(() => [
+  {
+    title: t("item.actorType"),
+    key: "Type",
+    width: 150,
+    ellipsis: { tooltip: true },
+  },
+  {
+    title: t("item.actorName"),
+    key: "NickName",
+    minWidth: 180,
+    ellipsis: { tooltip: true },
+    render(row) {
+      return (
+        row.NickName ||
+        row.TrainerNickName ||
+        row.GuildName ||
+        row.Class ||
+        "--"
+      );
+    },
+  },
+  {
+    title: t("pal.level"),
+    key: "level",
+    width: 80,
+  },
+  {
+    title: t("item.actorAction"),
+    key: "Action",
+    minWidth: 160,
+    ellipsis: { tooltip: true },
+    render(row) {
+      return row.Action || row.AI_Action || "--";
+    },
+  },
+  {
+    title: t("item.actorLocation"),
+    key: "location",
+    width: 220,
+    render: formatActorLocation,
+  },
+]);
+const handleWorldSnapshot = async () => {
+  if (!checkAuthToken()) {
+    message.error(t("message.requireauth"));
+    showLoginModal.value = true;
+    return;
+  }
+
+  showWorldSnapshotModal.value = true;
+  worldSnapshotLoading.value = true;
+  const { data, statusCode } = await new ApiService().getWorldActorSnapshot();
+  if (statusCode.value === 200) {
+    worldSnapshot.value = data.value;
+  } else {
+    worldSnapshot.value = null;
+    message.error(t("message.snapshotfail", { err: data.value?.error }));
+  }
+  worldSnapshotLoading.value = false;
+};
+const downloadWorldSnapshot = () => {
+  if (!worldSnapshot.value) return;
+
+  const content = JSON.stringify(worldSnapshot.value, null, 2);
+  const url = URL.createObjectURL(
+    new Blob([content], { type: "application/json;charset=utf-8" }),
+  );
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `palworld-world-snapshot-${dayjs().format(
+    "YYYYMMDD-HHmmss",
+  )}.json`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+  message.success(t("message.snapshotdownloadsuccess"));
 };
 
 const handleSaveWorld = () => {
@@ -654,35 +764,38 @@ const handleForceStop = () => {
   });
 };
 
-const doShutdown = async () => {
-  return await new ApiService().shutdownServer({
-    seconds: 60,
-    message: "Server Will Shutdown After 60 Seconds",
-  });
-};
+const showShutdownModal = ref(false);
+const shutdownSeconds = ref(60);
+const shutdownMessage = ref("");
+const shutdownSubmitting = ref(false);
 
-// 关机
 const handleShutdown = () => {
   if (checkAuthToken()) {
-    dialog.warning({
-      title: t("message.warn"),
-      content: t("message.shutdowntip"),
-      positiveText: t("button.confirm"),
-      negativeText: t("button.cancel"),
-      onPositiveClick: async () => {
-        const { data, statusCode } = await doShutdown();
-        if (statusCode.value === 200) {
-          message.success(t("message.shutdownsuccess"));
-          return;
-        } else {
-          message.error(t("message.shutdownfail", { err: data.value?.error }));
-        }
-      },
-      onNegativeClick: () => {},
-    });
+    shutdownSeconds.value = 60;
+    shutdownMessage.value = "";
+    showShutdownModal.value = true;
   } else {
     message.error(t("message.requireauth"));
     showLoginModal.value = true;
+  }
+};
+const confirmShutdown = async () => {
+  if (!Number.isInteger(shutdownSeconds.value) || shutdownSeconds.value < 1) {
+    message.error(t("message.shutdowninvalid"));
+    return;
+  }
+
+  shutdownSubmitting.value = true;
+  const { data, statusCode } = await new ApiService().shutdownServer({
+    seconds: shutdownSeconds.value,
+    message: shutdownMessage.value,
+  });
+  shutdownSubmitting.value = false;
+  if (statusCode.value === 200) {
+    message.success(t("message.shutdownsuccess"));
+    showShutdownModal.value = false;
+  } else {
+    message.error(t("message.shutdownfail", { err: data.value?.error }));
   }
 };
 
@@ -1314,6 +1427,116 @@ onMounted(async () => {
         virtual-scroll
       />
     </n-spin>
+  </n-modal>
+
+  <!-- world actor snapshot modal -->
+  <n-modal
+    v-model:show="showWorldSnapshotModal"
+    class="custom-card"
+    preset="card"
+    style="width: 94%; max-width: 1100px"
+    content-style="padding: 12px;"
+    header-style="padding: 12px;"
+    :title="$t('modal.worldSnapshot')"
+    size="huge"
+    :bordered="false"
+    :segmented="segmented"
+  >
+    <n-spin :show="worldSnapshotLoading">
+      <n-descriptions
+        v-if="worldSnapshot"
+        bordered
+        label-placement="top"
+        :column="smallScreen ? 2 : 4"
+        class="mb-3"
+      >
+        <n-descriptions-item :label="$t('item.time')">
+          {{ worldSnapshot.Time || "--" }}
+        </n-descriptions-item>
+        <n-descriptions-item :label="$t('item.serverFps')">
+          {{ worldSnapshot.FPS ?? "--" }}
+        </n-descriptions-item>
+        <n-descriptions-item :label="$t('item.averageFps')">
+          {{ worldSnapshot.AverageFPS ?? "--" }}
+        </n-descriptions-item>
+        <n-descriptions-item :label="$t('item.actorCount')">
+          {{ worldActorRows.length }}
+        </n-descriptions-item>
+      </n-descriptions>
+      <n-data-table
+        v-if="worldSnapshot"
+        :columns="worldSnapshotColumns"
+        :data="worldActorRows"
+        :max-height="560"
+        :single-line="false"
+        virtual-scroll
+      />
+      <n-empty v-else-if="!worldSnapshotLoading" />
+    </n-spin>
+    <template #footer>
+      <div class="flex justify-end">
+        <n-button
+          type="primary"
+          :disabled="!worldSnapshot"
+          @click="downloadWorldSnapshot"
+        >
+          <template #icon>
+            <n-icon><CloudDownloadOutlined /></n-icon>
+          </template>
+          {{ $t("button.downloadSnapshot") }}
+        </n-button>
+      </div>
+    </template>
+  </n-modal>
+
+  <!-- graceful shutdown modal -->
+  <n-modal
+    v-model:show="showShutdownModal"
+    class="custom-card"
+    preset="card"
+    style="width: 90%; max-width: 560px"
+    content-style="padding: 12px;"
+    footer-style="padding: 12px;"
+    header-style="padding: 12px;"
+    :title="$t('modal.shutdown')"
+    size="huge"
+    :bordered="false"
+    :segmented="segmented"
+  >
+    <n-form label-placement="top">
+      <n-form-item :label="$t('input.shutdownSeconds')">
+        <n-input-number
+          v-model:value="shutdownSeconds"
+          class="w-full"
+          :min="1"
+          :max="86400"
+          :precision="0"
+        />
+      </n-form-item>
+      <n-form-item :label="$t('input.shutdownMessage')">
+        <n-input
+          v-model:value="shutdownMessage"
+          type="textarea"
+          :autosize="{ minRows: 3, maxRows: 6 }"
+          :placeholder="$t('input.shutdownMessagePlaceholder')"
+        />
+      </n-form-item>
+    </n-form>
+    <template #footer>
+      <div class="flex justify-end">
+        <n-button type="tertiary" @click="showShutdownModal = false">
+          {{ $t("button.cancel") }}
+        </n-button>
+        <n-button
+          class="ml-3"
+          type="warning"
+          :loading="shutdownSubmitting"
+          @click="confirmShutdown"
+        >
+          {{ $t("button.shutdown") }}
+        </n-button>
+      </div>
+    </template>
   </n-modal>
 
   <!-- custom rcon drawer -->
