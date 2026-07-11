@@ -160,6 +160,7 @@ func SavSync() {
 	err := tool.Decode(viper.GetString("save.path"))
 	if err != nil {
 		logger.Errorf("%v\n", err)
+		return
 	}
 	logger.Info("Sav sync done\n")
 }

@@ -1,0 +1,6 @@
+packages:
+  - .
+
+overrides:
+  ignore: 7.0.5
+  use-sync-external-store: 1.4.0

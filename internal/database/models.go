@@ -88,17 +88,6 @@ type PlayerW struct {
 	PlayerUID string `json:"player_uid"`
 }
 
-type RconCommand struct {
-	Command     string `json:"command"`
-	Placeholder string `json:"placeholder"`
-	Remark      string `json:"remark"`
-}
-
-type RconCommandList struct {
-	UUID string `json:"uuid"`
-	RconCommand
-}
-
 type Items struct {
 	CommonContainerId           []*Item `json:"CommonContainerId"`
 	DropSlotContainerId         []*Item `json:"DropSlotContainerId"`

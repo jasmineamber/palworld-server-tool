@@ -4,16 +4,24 @@
    <a href="/README.md">简体中文</a> | <strong>English</strong> | <a href="/README.ja.md">日本語</a>
 </p>
 
+<p align="center">
+  <img src="./web/src/assets/app-icon.png" width="112" alt="Palworld Server Tool icon" />
+</p>
+
+<p align="center">
+  <a href="https://github.com/xutongxue233/palworld-server-tool/releases/latest">Download latest release</a> · <a href="./CHANGELOG.md">Changelog</a>
+</p>
+
 <p align='center'> 
-  Manage your Palworld dedicated server through a visual interface and REST API, using SAV file parsing and REST&RCON functionalities.<br/>
+  Manage Palworld dedicated servers with a React interface, the official REST API, and current SAV parsing.<br/>
   And it took a long and boring time to i18n...
 </p>
 
 <p align='center'>
-<img alt="GitHub Repo stars" src="https://img.shields.io/github/stars/zaigie/palworld-server-tool?style=for-the-badge">&nbsp;&nbsp;
+<img alt="GitHub Release" src="https://img.shields.io/github/v/release/xutongxue233/palworld-server-tool?style=for-the-badge">&nbsp;&nbsp;
 <img alt="Go" src="https://img.shields.io/badge/Go-00ADD8?style=for-the-badge&logo=go&logoColor=white">&nbsp;&nbsp;
 <img alt="Python" src="https://img.shields.io/badge/Python-FFD43B?style=for-the-badge&logo=python&logoColor=blue">&nbsp;&nbsp;
-<img alt="Vue" src="https://img.shields.io/badge/Vue%20js-35495E?style=for-the-badge&logo=vuedotjs&logoColor=4FC08D">
+<img alt="React" src="https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB">
 </p>
 
 ![PC](./docs/img/pst-en-1.png)
@@ -42,10 +50,9 @@ Additional features provided by the tool:
 
 - [x] Visual map management
 - [x] Whitelist management
-- [x] Defines and executes the RCON command
 - [x] Automatic archive backup and management
 
-This tool uses bbolt for single file storage, fetching and saving data from RCON and Level.sav files via scheduled tasks. It provides a simple visual interface and REST API for easy management and development.
+This tool stores synchronized REST API and Level.sav data in a single bbolt database and exposes it through the management interface.
 
 Due to limited maintenance and development staff, we welcome front-end, back-end developers, and even data engineers to submit PRs!
 
@@ -67,9 +74,9 @@ https://github.com/zaigie/palworld-server-tool/assets/17232619/49abcd34-0752-487
 <img src="./docs/img/pst-en-m-1.png" width="30%" /><img src="./docs/img/pst-en-m-2.png" width="30%" /><img src="./docs/img/pst-en-m-3.png" width="30%" />
 </p>
 
-## Enable REST API and RCON
+## Enable the REST API
 
-In this project, the REST API function of the server must be enabled for normal use, and the custom RCON function depends on the RCON function.[RCON Command Reference](./docs/rconCommand_en.txt)
+The server's official REST API must be enabled to synchronize online players and perform server management actions.
 
 If your private service tutorial is better written, if not, please close the server first, then modify the `PalWorldSettings.ini` file or `WorldOption.sav` file at [Pal-Conf](https://pal-conf.bluefissure.com/) and place it in the appropriate location to enable the server.
 
@@ -77,9 +84,8 @@ First set **Administrator password**
 
 ![ADMIN](./docs/img/admin-en.png)
 
-Then set **RCON** and **REST API**
+Then enable the **REST API**
 
-![RCON_REST](./docs/img/rest-rcon-en.png)
 
 ## Installation and Deployment
 
@@ -114,7 +120,7 @@ Download the latest executable files at:
 
 ```bash
 # Download pst_{version}_{platform}_{arch}.tar.gz and extract to the pst directory
-mkdir -p pst && tar -xzf pst_v0.10.0_linux_x86_64.tar.gz -C pst
+mkdir -p pst && tar -xzf pst_v1.0.0_linux_x86_64.tar.gz -C pst
 ```
 
 ##### Configuration
@@ -157,16 +163,6 @@ mkdir -p pst && tar -xzf pst_v0.10.0_linux_x86_64.tar.gz -C pst
      # Player leaving server message
      player_logout_message: "Player {username} has left the server! Current online player count: {online_num}."
 
-   # RCON Config
-   rcon:
-     # RCON Address Port
-     address: "127.0.0.1:25575"
-     # Server AdminPassword
-     password: ""
-     # Use PalGuard base64 RCON
-     use_base64: false
-     # RCON Timeout Sec
-     timeout: 5
 
    # REST API Config
    rest:
@@ -241,7 +237,7 @@ Access at http://{Server IP}:8080 after opening firewall and security group in c
 
 ##### Download and Extract
 
-Extract `pst_v0.10.0_windows_x86_64.zip` to any directory (recommend naming the folder `pst`).
+Extract `pst_v1.0.0_windows_x86_64.zip` to any directory (recommend naming the folder `pst`).
 
 ##### Configuration
 
@@ -283,16 +279,6 @@ task:
   # Player leaving server message
   player_logout_message: "Player {username} has left the server! Current online player count: {online_num}."
 
-# RCON Config
-rcon:
-  # RCON Address Port
-  address: "127.0.0.1:25575"
-  # Server AdminPassword
-  password: ""
-  # Use PalGuard base64 RCON
-  use_base64: false
-  # RCON Timeout Sec
-  timeout: 5
 
 # REST API Config
 rest:
@@ -370,8 +356,6 @@ docker run -d --name pst \
 -v /path/to/your/Pal/Saved:/game \
 -v ./backups:/app/backups \
 -e WEB__PASSWORD="your web password" \
--e RCON__ADDRESS="172.17.0.1:25575" \
--e RCON__PASSWORD="your admin password" \
 -e REST__ADDRESS="http://127.0.0.1:8212" \
 -e REST__PASSWORD="your admin password" \
 -e SAVE__PATH="/game" \
@@ -404,10 +388,6 @@ Set various environment variables, similar to those in [`config.yaml`](#configur
 |        WEB\_\_PASSWORD        |           ""            |  Text  |                          Password for Web interface admin mode                          |
 |          WEB\_\_PORT          |          8080           | Number |    **Changing the container mapping port is recommended instead of modifying this**     |
 |                               |                         |        |                                                                                         |
-|        RCON\_\_ADDRESS        |    "127.0.0.1:25575"    |  Text  |            RCON service address, can use container network 172.17.0.1:25575             |
-|       RCON\_\_PASSWORD        |           ""            |  Text  |                     AdminPassword in the server configuration file                      |
-|      RCON\_\_USE_BASE64       |          false          |  Bool  |                              Whether to enable RconBase64                               |
-|        RCON\_\_TIMEOUT        |            5            | Number |                      Timeout for individual RCON service requests                       |
 |                               |                         |        |                                                                                         |
 |     TASK\_\_SYNC_INTERVAL     |           60            | Number |                             Synchronize player online data                              |
 |    TASK\_\_PLAYER_LOGGING     |          false          |  Bool  |                      Players log in/log out of broadcast messages                       |
@@ -458,8 +438,6 @@ docker run -d --name pst \
 -p 8080:8080 \
 -v ./backups:/app/backups \
 -e WEB__PASSWORD="your password" \
--e RCON__ADDRESS="{GameServerIP}:{RconPort}" \
--e RCON__PASSWORD="your admin password" \
 -e REST__ADDRESS="http://{GameServerIP}:{RestAPIPort}" \
 -e REST__PASSWORD="your admin password" \
 -e SAVE__PATH="http://{GameServerIP}:{AgentPort}/sync" \
@@ -488,10 +466,6 @@ Then add `-v ./pst.db:/app/pst.db` in `docker run -v`.
 |        WEB\_\_PASSWORD        |           ""            |  Text  |                          Password for Web interface admin mode                          |
 |          WEB\_\_PORT          |          8080           | Number |    **Changing the container mapping port is recommended instead of modifying this**     |
 |                               |                         |        |                                                                                         |
-|        RCON\_\_ADDRESS        |    "127.0.0.1:25575"    |  Text  |            RCON service address, can use container network 172.17.0.1:25575             |
-|       RCON\_\_PASSWORD        |           ""            |  Text  |                     AdminPassword in the server configuration file                      |
-|      RCON\_\_USE_BASE64       |          false          |  Bool  |                              Whether to enable RconBase64                               |
-|        RCON\_\_TIMEOUT        |            5            | Number |                      Timeout for individual RCON service requests                       |
 |                               |                         |        |                                                                                         |
 |     TASK\_\_SYNC_INTERVAL     |           60            | Number |                             Synchronize player online data                              |
 |    TASK\_\_PLAYER_LOGGING     |          false          |  Bool  |                      Players log in/log out of broadcast messages                       |
@@ -601,15 +575,14 @@ SAVE__PATH="docker://04b0a9af4288:/palworld/Pal/Saved"
 
 ## Acknowledgements
 
-- [palworld-save-tools](https://github.com/cheahjs/palworld-save-tools) for providing save file parsing tool implementation
+- [PalworldSaveTools](https://github.com/deafdudecomputers/PalworldSaveTools) for the current `palsav-flex` parser, Oodle compression, and save rebuilding support
 - [palworld-server-toolkit](https://github.com/magicbear/palworld-server-toolkit) for providing high performance save file parsing
-- [pal-conf](https://github.com/Bluefissure/pal-conf) provides the generator configuration page
+- [pal-conf](https://github.com/Bluefissure/pal-conf) for the current server setting catalog and translation reference
 - [PalEdit](https://github.com/EternalWraith/PalEdit) for providing the initial conceptualization and logic for data processing
-- [gorcon](https://github.com/gorcon/rcon) for providing the basic ability to send/receive RCON requests
 
 ## LICENSE
 
-According to the [Apache2.0 LICENSE](LICENSE) authorization, any reprints please indicate in the README and document section! Any commercial behavior must be informed!
+The main application is licensed under [Apache 2.0](LICENSE). The separate `sav_cli` process contains GPL-3.0-or-later components; `sav_cli-GPL-3.0.txt` is included in release packages.
 
 ```
 

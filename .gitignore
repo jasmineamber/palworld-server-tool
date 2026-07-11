@@ -40,8 +40,13 @@ dist
 *.sav
 *.sav.json
 structure.json
+__pycache__/
+*.pyc
+*.syso
+/Saved.zip
 
 .pnpm-store
+/.cache/
 .vscode
 .idea
 

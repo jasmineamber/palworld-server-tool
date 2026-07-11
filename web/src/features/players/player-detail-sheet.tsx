@@ -1,0 +1,600 @@
+import { useMemo, useState } from "react";
+import {
+  Ban,
+  Box,
+  Check,
+  Copy,
+  Crown,
+  Hammer,
+  HeartPulse,
+  LoaderCircle,
+  ShieldCheck,
+  ShieldOff,
+  UserRoundX,
+} from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+
+import { ErrorState, LoadingState } from "@/components/common/data-state";
+import { StatusDot } from "@/components/common/status-dot";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
+import { useGuilds, usePlayer, queryKeys } from "@/hooks/use-server-data";
+import { api, getApiErrorMessage } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
+import {
+  copyText,
+  formatCoordinate,
+  formatDateTime,
+  isRecentlyOnline,
+} from "@/lib/format";
+import {
+  getItemImage,
+  getItemMetadata,
+  getPalImage,
+  getPalName,
+} from "@/lib/game-data";
+import { useI18n } from "@/lib/i18n";
+import type { Pal, PlayerItem, WhitelistPlayer } from "@/types/api";
+
+import avatarUrl from "@/assets/avatar.webp";
+import { PalDetailDialog } from "@/features/players/pal-detail-dialog";
+
+type PlayerAction = "kick" | "ban" | "unban";
+
+const inventoryTabs = [
+  ["CommonContainerId", "players.common"],
+  ["EssentialContainerId", "players.essential"],
+  ["WeaponLoadOutContainerId", "players.weapons"],
+  ["PlayerEquipArmorContainerId", "players.armor"],
+  ["FoodEquipContainerId", "players.food"],
+  ["DropSlotContainerId", "players.drop"],
+] as const;
+
+function DetailField({
+  label,
+  value,
+  copyable = false,
+}: {
+  label: string;
+  value?: string | number;
+  copyable?: boolean;
+}) {
+  const { t } = useI18n();
+  const text = value === undefined || value === "" ? "--" : String(value);
+  return (
+    <div className="min-w-0 border-b py-3 last:border-b-0">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <div className="mt-1 flex items-center gap-2">
+        <p className="font-data min-w-0 flex-1 truncate text-sm">{text}</p>
+        {copyable && text !== "--" ? (
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            onClick={() => {
+              void copyText(text);
+              toast.success(t("message.copied"));
+            }}
+          >
+            <Copy />
+            <span className="sr-only">{t("action.copy")}</span>
+          </Button>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function InventoryTable({ items }: { items: PlayerItem[] }) {
+  const { locale, t } = useI18n();
+  if (!items?.length) {
+    return (
+      <div className="flex min-h-36 items-center justify-center text-sm text-muted-foreground">
+        {t("players.noItems")}
+      </div>
+    );
+  }
+  return (
+    <div className="overflow-x-auto rounded-md border">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>{t("item.name")}</TableHead>
+            <TableHead className="w-24 text-right">
+              {t("item.quantity")}
+            </TableHead>
+            <TableHead className="w-20 text-right">{t("item.slot")}</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {items.map((item) => {
+            const metadata = getItemMetadata(item.ItemId, locale);
+            return (
+              <TableRow key={`${item.SlotIndex}-${item.ItemId}`}>
+                <TableCell>
+                  <div className="flex items-center gap-3">
+                    {getItemImage(item.ItemId) ? (
+                      <img
+                        src={getItemImage(item.ItemId)}
+                        alt={metadata.name}
+                        className="size-9 rounded-md border bg-muted object-contain p-1"
+                      />
+                    ) : (
+                      <div className="flex size-9 items-center justify-center rounded-md border bg-muted">
+                        <Box className="size-4 text-muted-foreground" />
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">
+                        {metadata.name}
+                      </p>
+                      <p className="font-data truncate text-[10px] text-muted-foreground">
+                        {item.ItemId}
+                      </p>
+                    </div>
+                  </div>
+                </TableCell>
+                <TableCell className="font-data text-right">
+                  {item.StackCount}
+                </TableCell>
+                <TableCell className="font-data text-right">
+                  {item.SlotIndex}
+                </TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
+
+export function PlayerDetailSheet({
+  playerUid,
+  onOpenChange,
+  requestLogin,
+}: {
+  playerUid: string | null;
+  onOpenChange: (open: boolean) => void;
+  requestLogin: () => void;
+}) {
+  const { locale, t } = useI18n();
+  const { isAuthenticated } = useAuth();
+  const queryClient = useQueryClient();
+  const playerQuery = usePlayer(playerUid);
+  const guildsQuery = useGuilds();
+  const [palSearch, setPalSearch] = useState("");
+  const [selectedPal, setSelectedPal] = useState<Pal | null>(null);
+  const [pendingAction, setPendingAction] = useState<PlayerAction | null>(null);
+  const [actionMessage, setActionMessage] = useState("");
+
+  const whitelistQuery = useQuery({
+    queryKey: queryKeys.whitelist,
+    queryFn: api.getWhitelist,
+    enabled: isAuthenticated && Boolean(playerUid),
+  });
+
+  const player = playerQuery.data;
+  const online = isRecentlyOnline(player?.last_online);
+  const guild = useMemo(
+    () =>
+      guildsQuery.data?.find((candidate) =>
+        candidate.players.some((member) => member.player_uid === playerUid),
+      ),
+    [guildsQuery.data, playerUid],
+  );
+  const isWhitelisted = useMemo(() => {
+    if (!player) return false;
+    return (whitelistQuery.data ?? []).some(
+      (entry) =>
+        (entry.player_uid && entry.player_uid === player.player_uid) ||
+        (entry.user_id && entry.user_id === player.user_id) ||
+        (entry.steam_id && entry.steam_id === player.steam_id),
+    );
+  }, [player, whitelistQuery.data]);
+
+  const filteredPals = useMemo(() => {
+    const normalized = palSearch.trim().toLowerCase();
+    if (!normalized) return player?.pals ?? [];
+    return (player?.pals ?? []).filter((pal) => {
+      const name =
+        `${pal.nickname} ${getPalName(pal.type, locale)} ${pal.skills.join(" ")}`.toLowerCase();
+      return name.includes(normalized);
+    });
+  }, [locale, palSearch, player?.pals]);
+
+  const actionMutation = useMutation({
+    mutationFn: ({
+      action,
+      message,
+    }: {
+      action: PlayerAction;
+      message: string;
+    }) => api.playerAction(playerUid ?? "", action, message),
+    onSuccess: async () => {
+      toast.success(t("message.updated"));
+      setPendingAction(null);
+      setActionMessage("");
+      await queryClient.invalidateQueries({ queryKey: queryKeys.players });
+    },
+    onError: (error) => toast.error(getApiErrorMessage(error)),
+  });
+
+  const whitelistMutation = useMutation({
+    mutationFn: (entry: WhitelistPlayer) => api.addWhitelist(entry),
+    onSuccess: async () => {
+      toast.success(t("message.updated"));
+      await queryClient.invalidateQueries({ queryKey: queryKeys.whitelist });
+    },
+    onError: (error) => toast.error(getApiErrorMessage(error)),
+  });
+
+  const requireAdmin = (action: () => void) => {
+    if (!isAuthenticated) {
+      toast.error(t("message.authRequired"));
+      requestLogin();
+      return;
+    }
+    action();
+  };
+
+  return (
+    <>
+      <Sheet open={Boolean(playerUid)} onOpenChange={onOpenChange}>
+        <SheetContent side="right" className="w-full gap-0 p-0 sm:max-w-3xl">
+          <SheetHeader className="border-b px-5 py-5 text-left sm:px-6">
+            <div className="flex items-start gap-4 pr-8">
+              <img
+                src={avatarUrl}
+                alt=""
+                className="size-14 rounded-md border bg-muted object-cover"
+              />
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <SheetTitle className="truncate text-xl">
+                    {player?.nickname ||
+                      player?.account_name ||
+                      t("players.details")}
+                  </SheetTitle>
+                  {player ? (
+                    <Badge variant="secondary">Lv.{player.level}</Badge>
+                  ) : null}
+                </div>
+                <SheetDescription className="mt-1 flex items-center gap-2">
+                  <StatusDot online={online} />
+                  {online ? t("status.online") : t("status.offline")}
+                  {guild ? ` · ${guild.name}` : ""}
+                </SheetDescription>
+              </div>
+            </div>
+          </SheetHeader>
+
+          {playerQuery.isPending ? (
+            <LoadingState className="h-full" />
+          ) : playerQuery.isError ? (
+            <ErrorState
+              error={playerQuery.error}
+              retry={() => void playerQuery.refetch()}
+            />
+          ) : player ? (
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+              <Tabs
+                defaultValue="profile"
+                className="flex min-h-0 flex-1 flex-col"
+              >
+                <div className="border-b px-5 sm:px-6">
+                  <TabsList
+                    variant="line"
+                    className="h-12 w-full justify-start overflow-x-auto"
+                  >
+                    <TabsTrigger value="profile">
+                      {t("players.profile")}
+                    </TabsTrigger>
+                    <TabsTrigger value="pals">
+                      {t("players.pals")}{" "}
+                      <span className="font-data">
+                        {player.pals?.length ?? 0}
+                      </span>
+                    </TabsTrigger>
+                    <TabsTrigger value="inventory">
+                      {t("players.inventory")}
+                    </TabsTrigger>
+                  </TabsList>
+                </div>
+
+                <ScrollArea className="min-h-0 flex-1">
+                  <TabsContent
+                    value="profile"
+                    className="m-0 space-y-5 p-5 sm:p-6"
+                  >
+                    <div className="grid overflow-hidden rounded-md border sm:grid-cols-4">
+                      <div className="border-b p-4 sm:border-b-0 sm:border-r">
+                        <HeartPulse className="size-4 text-destructive" />
+                        <p className="font-data mt-3 text-xl font-semibold">
+                          {Math.round((player.hp ?? 0) / 1000)}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {t("players.hp")}
+                        </p>
+                      </div>
+                      <div className="border-b p-4 sm:border-b-0 sm:border-r">
+                        <ShieldCheck className="size-4 text-primary" />
+                        <p className="font-data mt-3 text-xl font-semibold">
+                          {Math.round((player.shield_hp ?? 0) / 1000)}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {t("players.shield")}
+                        </p>
+                      </div>
+                      <div className="border-b p-4 sm:border-b-0 sm:border-r">
+                        <Hammer className="size-4 text-[var(--warning)]" />
+                        <p className="font-data mt-3 text-xl font-semibold">
+                          {player.building_count ?? 0}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {t("players.buildings")}
+                        </p>
+                      </div>
+                      <div className="p-4">
+                        <Crown className="size-4 text-[var(--signal)]" />
+                        <p className="font-data mt-3 text-xl font-semibold">
+                          {player.level}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {t("players.level")}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="grid gap-x-6 rounded-md border px-4 sm:grid-cols-2">
+                      <DetailField
+                        label={t("players.playerUid")}
+                        value={player.player_uid}
+                        copyable
+                      />
+                      <DetailField
+                        label={t("players.userId")}
+                        value={player.user_id}
+                        copyable
+                      />
+                      <DetailField
+                        label={t("players.steamId")}
+                        value={player.steam_id}
+                        copyable
+                      />
+                      <DetailField
+                        label={t("players.account")}
+                        value={player.account_name}
+                      />
+                      <DetailField
+                        label={t("players.ip")}
+                        value={player.ip}
+                        copyable
+                      />
+                      <DetailField
+                        label={t("players.ping")}
+                        value={
+                          player.ping ? `${player.ping.toFixed(1)} ms` : "--"
+                        }
+                      />
+                      <DetailField
+                        label={t("players.location")}
+                        value={`X ${formatCoordinate(player.location_x)} / Y ${formatCoordinate(player.location_y)}`}
+                      />
+                      <DetailField
+                        label={t("players.lastOnline")}
+                        value={formatDateTime(player.last_online)}
+                      />
+                    </div>
+                  </TabsContent>
+
+                  <TabsContent
+                    value="pals"
+                    className="m-0 space-y-4 p-5 sm:p-6"
+                  >
+                    <Input
+                      value={palSearch}
+                      onChange={(event) => setPalSearch(event.target.value)}
+                      placeholder={t("players.search")}
+                    />
+                    {filteredPals.length ? (
+                      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                        {filteredPals.map((pal, index) => {
+                          const name =
+                            pal.nickname || getPalName(pal.type, locale);
+                          return (
+                            <button
+                              key={`${pal.type}-${index}-${pal.nickname}`}
+                              type="button"
+                              onClick={() => setSelectedPal(pal)}
+                              className="flex min-w-0 items-center gap-3 rounded-md border bg-card p-3 text-left transition-colors hover:bg-muted/65 focus-visible:ring-2 focus-visible:ring-ring"
+                            >
+                              <img
+                                src={getPalImage(pal.type, pal.is_boss)}
+                                alt={name}
+                                className="size-12 shrink-0 rounded-md border bg-muted object-contain p-1"
+                              />
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate text-sm font-medium">
+                                  {name}
+                                </p>
+                                <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                                  {getPalName(pal.type, locale)}
+                                </p>
+                              </div>
+                              <span className="font-data text-xs">
+                                Lv.{pal.level}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="flex min-h-40 items-center justify-center text-sm text-muted-foreground">
+                        {t("players.noPals")}
+                      </div>
+                    )}
+                  </TabsContent>
+
+                  <TabsContent value="inventory" className="m-0 p-5 sm:p-6">
+                    <Tabs defaultValue="CommonContainerId">
+                      <TabsList className="mb-4 max-w-full justify-start overflow-x-auto">
+                        {inventoryTabs.map(([key, label]) => (
+                          <TabsTrigger key={key} value={key}>
+                            {t(label)}
+                          </TabsTrigger>
+                        ))}
+                      </TabsList>
+                      {inventoryTabs.map(([key]) => (
+                        <TabsContent key={key} value={key} className="m-0">
+                          <InventoryTable items={player.items?.[key] ?? []} />
+                        </TabsContent>
+                      ))}
+                    </Tabs>
+                  </TabsContent>
+                </ScrollArea>
+              </Tabs>
+
+              <div className="flex flex-wrap items-center gap-2 border-t bg-background px-5 py-3 sm:px-6">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={isWhitelisted || whitelistMutation.isPending}
+                  onClick={() =>
+                    requireAdmin(() =>
+                      whitelistMutation.mutate({
+                        name: player.nickname,
+                        player_uid: player.player_uid,
+                        user_id: player.user_id,
+                        steam_id: player.steam_id,
+                      }),
+                    )
+                  }
+                >
+                  {whitelistMutation.isPending ? (
+                    <LoaderCircle className="animate-spin" />
+                  ) : (
+                    <ShieldCheck />
+                  )}
+                  {isWhitelisted ? <Check /> : null}
+                  {t("action.addWhitelist")}
+                </Button>
+                <div className="ml-auto flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => requireAdmin(() => setPendingAction("kick"))}
+                  >
+                    <UserRoundX /> {t("action.kick")}
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => requireAdmin(() => setPendingAction("ban"))}
+                  >
+                    <Ban /> {t("action.ban")}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      requireAdmin(() => setPendingAction("unban"))
+                    }
+                  >
+                    <ShieldOff /> {t("action.unban")}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+        </SheetContent>
+      </Sheet>
+
+      <AlertDialog
+        open={Boolean(pendingAction)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPendingAction(null);
+            setActionMessage("");
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {pendingAction ? t(`action.${pendingAction}`) : ""} ·{" "}
+              {player?.nickname}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingAction === "unban"
+                ? t("action.unban")
+                : t("operations.broadcastPlaceholder")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {pendingAction !== "unban" ? (
+            <Textarea
+              value={actionMessage}
+              onChange={(event) => setActionMessage(event.target.value)}
+              placeholder={t("operations.broadcastPlaceholder")}
+            />
+          ) : null}
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("action.cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              variant={pendingAction === "ban" ? "destructive" : "default"}
+              disabled={actionMutation.isPending}
+              onClick={(event) => {
+                event.preventDefault();
+                if (pendingAction) {
+                  actionMutation.mutate({
+                    action: pendingAction,
+                    message: actionMessage,
+                  });
+                }
+              }}
+            >
+              {actionMutation.isPending ? (
+                <LoaderCircle className="animate-spin" />
+              ) : null}
+              {t("action.confirm")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <PalDetailDialog
+        pal={selectedPal}
+        onOpenChange={(open) => !open && setSelectedPal(null)}
+      />
+    </>
+  );
+}
