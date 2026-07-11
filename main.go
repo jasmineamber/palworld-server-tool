@@ -63,6 +63,9 @@ func main() {
 
 	mapTilesFS, _ := fs.Sub(mapTiles, mapRoot)
 	router.StaticFS("/map/tiles", http.FS(mapTilesFS))
+	router.GET("/favicon.ico", func(c *gin.Context) {
+		c.Data(http.StatusOK, "image/x-icon", favicon)
+	})
 
 	router.GET("/", func(c *gin.Context) {
 		c.Writer.WriteHeader(http.StatusOK)
@@ -70,9 +73,10 @@ func main() {
 		c.Writer.Write(file)
 	})
 	router.GET("/pal-conf", func(c *gin.Context) {
-		c.Writer.WriteHeader(http.StatusOK)
-		file, _ := palConfHTML.ReadFile(palConfHTMLPath)
-		c.Writer.Write(file)
+		c.Redirect(http.StatusTemporaryRedirect, "/#/configuration")
+	})
+	router.GET("/pal-conf/", func(c *gin.Context) {
+		c.Redirect(http.StatusTemporaryRedirect, "/#/configuration")
 	})
 
 	localIp, err := system.GetLocalIP()

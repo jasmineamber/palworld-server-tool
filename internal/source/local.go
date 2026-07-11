@@ -2,12 +2,12 @@ package source
 
 import (
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
 
 	"github.com/google/uuid"
-	"github.com/zaigie/palworld-server-tool/internal/logger"
 	"github.com/zaigie/palworld-server-tool/internal/system"
 )
 
@@ -15,7 +15,7 @@ func CopyFromLocal(src, way string) (string, error) {
 
 	isDir, err := system.CheckIsDir(src)
 	if err != nil {
-		logger.Errorf("error checking if %s is a directory: %v\n", src, err)
+		return "", fmt.Errorf("cannot access save source %q: %w", src, err)
 	}
 
 	// 获得Level.sav路径

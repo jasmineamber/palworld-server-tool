@@ -10,15 +10,14 @@ var assets embed.FS
 //go:embed internal/embedfallback/index.html
 var indexHTML embed.FS
 
-//go:embed internal/embedfallback/pal-conf.html
-var palConfHTML embed.FS
+//go:embed internal/embedfallback/favicon.ico
+var favicon []byte
 
 //go:embed internal/embedfallback/map/*
 var mapTiles embed.FS
 
 const (
-	assetsRoot      = "internal/embedfallback/assets"
-	indexHTMLPath   = "internal/embedfallback/index.html"
-	palConfHTMLPath = "internal/embedfallback/pal-conf.html"
-	mapRoot         = "internal/embedfallback/map"
+	assetsRoot    = "internal/embedfallback/assets"
+	indexHTMLPath = "internal/embedfallback/index.html"
+	mapRoot       = "internal/embedfallback/map"
 )

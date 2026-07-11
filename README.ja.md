@@ -4,16 +4,24 @@
    <a href="/README.md">简体中文</a> | <a href="/README.en.md">English</a> | <strong>日本語</strong>
 </p>
 
+<p align="center">
+  <img src="./web/src/assets/app-icon.png" width="112" alt="Palworld Server Tool アイコン" />
+</p>
+
+<p align="center">
+  <a href="https://github.com/xutongxue233/palworld-server-tool/releases/latest">最新版をダウンロード</a> · <a href="./CHANGELOG.md">更新履歴</a>
+</p>
+
 <p align='center'>
-  可視化インターフェースとRESTインターフェースを通じて幻獣パル専用サーバーを管理し、SAVファイルの解析とREST&RCONを基にしています。<br/>
+  React インターフェース、公式 REST API、最新の SAV 解析で Palworld 専用サーバーを管理します。<br/>
   そして、国際化のために長くて退屈な時間を費やしました...
 </p>
 
 <p align='center'>
-<img alt="GitHub Repo stars" src="https://img.shields.io/github/stars/zaigie/palworld-server-tool?style=for-the-badge">&nbsp;&nbsp;
+<img alt="GitHub Release" src="https://img.shields.io/github/v/release/xutongxue233/palworld-server-tool?style=for-the-badge">&nbsp;&nbsp;
 <img alt="Go" src="https://img.shields.io/badge/Go-00ADD8?style=for-the-badge&logo=go&logoColor=white">&nbsp;&nbsp;
 <img alt="Python" src="https://img.shields.io/badge/Python-FFD43B?style=for-the-badge&logo=python&logoColor=blue">&nbsp;&nbsp;
-<img alt="Vue" src="https://img.shields.io/badge/Vue%20js-35495E?style=for-the-badge&logo=vuedotjs&logoColor=4FC08D">
+<img alt="React" src="https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB">
 </p>
 
 ![PC](./docs/img/pst-ja-1.png)
@@ -42,10 +50,9 @@
 
 - [x] 可視化マップ管理です
 - [x] ホワイトリスト管理
-- [x] カスタム RCON コマンドの実行
 - [x] アーカイブ自動バックアップと管理です
 
-このツールは bbolt シングルファイルストレージを使用し、RCON と Level.sav ファイルのデータを定期的に取得して保存し、簡単な可視化インターフェースと REST インターフェースを提供し、管理と開発を容易にします。
+このツールは公式 REST API と Level.sav の同期データを bbolt に保存し、管理画面から利用できます。
 
 メンテナンスと開発のスタッフが少ないため、意欲はありますが、力不足です。フロントエンド、バックエンド、データエンジニアの皆さんからの PR を歓迎します！
 
@@ -67,9 +74,9 @@ https://github.com/zaigie/palworld-server-tool/assets/17232619/afdf485c-4b34-491
 <img src="./docs/img/pst-ja-m-1.png" width="30%" /><img src="./docs/img/pst-ja-m-2.png" width="30%" /><img src="./docs/img/pst-ja-m-3.png" width="30%" />
 </p>
 
-## REST API と RCON を有効にします
+## REST API を有効にする
 
-このプロジェクトでは、サーバーの REST API 機能を通常の使用のために有効にする必要があり、カスタム RCON 機能は RCON 関数に依存します。[RCON コマンド一覧](./docs/rconCommand_ja.txt)
+オンラインプレイヤーの同期とサーバー管理操作には、公式 REST API を有効にする必要があります。
 
 マニュアルがある方が良いですが、ない場合は、最初にサービス側を閉じて、 [Pal-Conf](https://pal-conf.bluefissure.com/) `PalWorldSettings.ini` ファイルや`WorldOption.sav` ファイルをパルコンフで修正して、サービス側を有効にします。
 
@@ -77,9 +84,8 @@ https://github.com/zaigie/palworld-server-tool/assets/17232619/afdf485c-4b34-491
 
 ![ADMIN](./docs/img/admin-ja.png)
 
-次に**RCON**と**REST API**を設定します
+次に **REST API** を有効にします
 
-![RCON_REST](./docs/img/rest-rcon-ja.png)
 
 ## インストールとデプロイメント
 
@@ -114,7 +120,7 @@ https://github.com/zaigie/palworld-server-tool/assets/17232619/afdf485c-4b34-491
 
 ```bash
 # pst_{version}_{platform}_{arch}.tar.gz ファイルをダウンロードしてpstディレクトリに解凍します
-mkdir -p pst && tar -xzf pst_v0.10.0_linux_x86_64.tar.gz -C pst
+mkdir -p pst && tar -xzf pst_v1.0.0_linux_x86_64.tar.gz -C pst
 ```
 
 ##### 設定
@@ -157,16 +163,6 @@ mkdir -p pst && tar -xzf pst_v0.10.0_linux_x86_64.tar.gz -C pst
      # プレイヤーはサーバーメッセージから離脱します
      player_logout_message: "Player {username} has left the server! Current online player count: {online_num}."
 
-   # RCON関連設定
-   rcon:
-     # RCONのアドレスとポート
-     address: "127.0.0.1:25575"
-     # サーバー側で設定されたRCON AdminPassword
-     password: ""
-     # サーバーがPalGuard機能プラグインのBase64 RCON機能を有効にしているかどうか（自分でインストールする必要があります）
-     use_base64: false
-     # RCON通信のタイムアウト時間、<= 5を推奨
-     timeout: 5
 
    # REST API 関連構成です
    rest:
@@ -174,7 +170,6 @@ mkdir -p pst && tar -xzf pst_v0.10.0_linux_x86_64.tar.gz -C pst
      address: "http://127.0.0.1:8212"
      # Base Authのユーザー名,adminに固定します
      username: "admin"
-     # サーバー側で設定されたRCON AdminPassword
      password: ""
      # 通信のタイムアウト時間、<= 5を推奨
      timeout: 5
@@ -241,7 +236,7 @@ kill $(ps aux | grep 'pst' | awk '{print $2}') | head -n 1
 
 ##### ダウンロードと解凍
 
-`pst_v0.10.0_windows_x86_64.zip`を任意のディレクトリに解凍します（`pst`というディレクトリ名を推奨）。
+`pst_v1.0.0_windows_x86_64.zip`を任意のディレクトリに解凍します（`pst`というディレクトリ名を推奨）。
 
 ##### 設定
 
@@ -283,16 +278,6 @@ task:
   # プレイヤーはサーバーメッセージから離脱します
   player_logout_message: "Player {username} has left the server! Current online player count: {online_num}."
 
-# RCON関連設定
-rcon:
-  # RCONのアドレスとポート
-  address: "127.0.0.1:25575"
-  # サーバー側で設定されたRCON AdminPassword
-  password: ""
-  # サーバーがPalGuard機能プラグインのBase64 RCON機能を有効にしているかどうか（自分でインストールする必要があります）
-  use_base64: false
-  # RCON通信のタイムアウト時間、<= 5を推奨
-  timeout: 5
 
 # REST API 関連構成です
 rest:
@@ -300,7 +285,6 @@ rest:
   address: "http://127.0.0.1:8212"
   # Base Authのユーザー名,adminに固定します
   username: "admin"
-  # サーバー側で設定されたRCON AdminPassword
   password: ""
   # 通信のタイムアウト時間、<= 5を推奨
   timeout: 5
@@ -374,8 +358,6 @@ docker run -d --name pst \
 -v /path/to/your/Pal/Saved:/game \
 -v ./backups:/app/backups \
 -e WEB__PASSWORD="your web password" \
--e RCON__ADDRESS="172.17.0.1:25575" \
--e RCON__PASSWORD="your admin password" \
 -e REST__ADDRESS="http://127.0.0.1:8212" \
 -e REST__PASSWORD="your admin password" \
 -e SAVE__PATH="/game" \
@@ -410,10 +392,6 @@ touch pst.db
 |        WEB\_\_PASSWORD        |           ""            |    文字列    |                         Web インターフェースの管理者パスワード                         |
 |          WEB\_\_PORT          |          8080           |     数値     | **特に必要がない限り、変更するのではなくコンテナのマッピングポートを変更してください** |
 |                               |                         |              |                                                                                        |
-|        RCON\_\_ADDRESS        |    "127.0.0.1:25575"    |    文字列    |    RCON サービスのアドレス、コンテナネットワークの 172.17.0.1:25575 を使用できます     |
-|       RCON\_\_PASSWORD        |           ""            |    文字列    |                          サーバー設定ファイルの AdminPassword                          |
-|      RCON\_\_USE_BASE64       |          false          | ブール値です |                              RCON Base64 をオンにしますか                              |
-|        RCON\_\_TIMEOUT        |            5            |     数値     |                   RCON サービスへの単一リクエストのタイムアウト時間                    |
 |                               |                         |              |                                                                                        |
 |     TASK\_\_SYNC_INTERVAL     |           60            |     数値     |                サーバーにプレイヤーのオンラインデータの同期を要求します                |
 |    TASK\_\_PLAYER_LOGGING     |          false          | ブール値です |                      プレイヤー登録・アナウンスメッセージ掲載です                      |
@@ -466,8 +444,6 @@ docker run -d --name pst \
 -p 8080:8080 \
 -v ./backups:/app/backups \
 -e WEB__PASSWORD="your password" \
--e RCON__ADDRESS="{GameServerIP}:{RconPort}" \
--e RCON__PASSWORD="your admin password" \
 -e REST__ADDRESS="http://{GameServerIP}:{RestAPIPort}" \
 -e REST__PASSWORD="your admin password" \
 -e SAVE__PATH="http://{GameServerIP}:{AgentPort}/sync" \
@@ -496,10 +472,6 @@ touch pst.db
 |        WEB\_\_PASSWORD        |           ""            |    文字列    |                            Web インターフェースの管理者パスワード                             |
 |          WEB\_\_PORT          |          8080           |     数値     |    **特に必要がない限り、変更するのではなくコンテナのマッピングポートを変更してください**     |
 |                               |                         |              |                                                                                               |
-|        RCON\_\_ADDRESS        |    "127.0.0.1:25575"    |    文字列    |        RCON サービスのアドレス、コンテナネットワークの 172.17.0.1:25575 を使用できます        |
-|       RCON\_\_PASSWORD        |           ""            |    文字列    |                             サーバー設定ファイルの AdminPassword                              |
-|      RCON\_\_USE_BASE64       |          false          | ブール値です |                                 RCON Base64 をオンにしますか                                  |
-|        RCON\_\_TIMEOUT        |            5            |     数値     |                       RCON サービスへの単一リクエストのタイムアウト時間                       |
 |                               |                         |              |                                                                                               |
 |     TASK\_\_SYNC_INTERVAL     |           60            |     数値     |                   サーバーにプレイヤーのオンラインデータの同期を要求します                    |
 |    TASK\_\_PLAYER_LOGGING     |          false          | ブール値です |                         プレイヤー登録・アナウンスメッセージ掲載です                          |
@@ -611,12 +583,11 @@ SAVE__PATH="docker://04b0a9af4288:/palworld/Pal/Saved"
 
 ## 謝辞
 
-- [palworld-save-tools](https://github.com/cheahjs/palworld-save-tools) は存档解析ツールの実装を提供しました
+- [PalworldSaveTools](https://github.com/deafdudecomputers/PalworldSaveTools) の `palsav-flex` は、現在のセーブ解析、Oodle 圧縮、再構築機能を提供します
 - [palworld-server-toolkit](https://github.com/magicbear/palworld-server-toolkit) は存档の高性能解析の一部を提供しました
-- [pal-conf](https://github.com/Bluefissure/pal-conf) 構成生成器ページを提供します
+- [pal-conf](https://github.com/Bluefissure/pal-conf) は最新のサーバー設定一覧と翻訳の参照元です
 - [PalEdit](https://github.com/EternalWraith/PalEdit) は最初のデータ化思考とロジックを提供しました
-- [gorcon](https://github.com/gorcon/rcon) は RCON リクエスト/レシーブの基本能力を提供しました
 
 ## ライセンス
 
-[Apache2.0 ライセンス](LICENSE) に基づいて授与されます。任意の転載は README とファイル部分で明記してください！商用行為は必ず通知してください！
+メインアプリケーションは [Apache 2.0](LICENSE) で提供されます。別プロセスの `sav_cli` には GPL-3.0-or-later コンポーネントが含まれ、配布物に `sav_cli-GPL-3.0.txt` を同梱します。

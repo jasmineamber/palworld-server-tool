@@ -4,16 +4,24 @@
    <strong>简体中文</strong> | <a href="/README.en.md">English</a> | <a href="/README.ja.md">日本語</a>
 </p>
 
+<p align="center">
+  <img src="./web/src/assets/app-icon.png" width="112" alt="Palworld Server Tool 图标" />
+</p>
+
+<p align="center">
+  <a href="https://github.com/xutongxue233/palworld-server-tool/releases/latest">下载最新版本</a> · <a href="./CHANGELOG.md">更新记录</a>
+</p>
+
 <p align='center'>
-  通过可视化界面及 REST 接口管理幻兽帕鲁专用服务器，基于 SAV 存档文件解析及 REST&RCON 实现<br/>
+  通过 React 可视化界面、官方 REST API 与最新 SAV 存档解析管理幻兽帕鲁专用服务器<br/>
   并且花了很漫长且枯燥的时间去做了国际化...
 </p>
 
 <p align='center'>
-<img alt="GitHub Repo stars" src="https://img.shields.io/github/stars/zaigie/palworld-server-tool?style=for-the-badge">&nbsp;&nbsp;
+<img alt="GitHub Release" src="https://img.shields.io/github/v/release/xutongxue233/palworld-server-tool?style=for-the-badge">&nbsp;&nbsp;
 <img alt="Go" src="https://img.shields.io/badge/Go-00ADD8?style=for-the-badge&logo=go&logoColor=white">&nbsp;&nbsp;
 <img alt="Python" src="https://img.shields.io/badge/Python-FFD43B?style=for-the-badge&logo=python&logoColor=blue">&nbsp;&nbsp;
-<img alt="Vue" src="https://img.shields.io/badge/Vue%20js-35495E?style=for-the-badge&logo=vuedotjs&logoColor=4FC08D">
+<img alt="React" src="https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB">
 </p>
 
 ![PC](./docs/img/pst-zh-1.png)
@@ -46,10 +54,26 @@
 
 - [x] 可视化地图管理
 - [x] 白名单管理
-- [x] 自定义 RCON 命令并执行
 - [x] 存档自动备份与管理
 
-本工具使用 bbolt 单文件存储，将 RCON 和 Level.sav 文件的数据通过定时任务获取并保存，提供简单的可视化界面和 REST 接口和便于管理与开发。
+### 存档校验与离线编辑
+
+发行包内置的新版本 `sav_cli` 支持当前 Palworld 存档的 Oodle 压缩格式，可校验、导出 JSON、从 JSON 重建并执行无损往返测试。编辑前必须停止服务器并备份整个世界存档目录，禁止直接覆盖正在运行的 `Level.sav`。
+
+```powershell
+# 校验存档
+.\sav_cli.exe --mode validate --file .\Level.sav
+
+# 导出可编辑 JSON
+.\sav_cli.exe --mode export --file .\Level.sav --output .\Level.editable.json
+
+# 编辑 JSON 后重建为新文件；不会覆盖原始存档
+.\sav_cli.exe --mode rebuild --file .\Level.editable.json --output .\Level.edited.sav
+```
+
+详细参数和许可证说明见 [`sav_cli/README.md`](./sav_cli/README.md)。
+
+本工具使用 bbolt 单文件存储，通过定时任务同步官方 REST API 与 Level.sav 数据，并提供可视化管理界面。
 
 由于维护开发人员较少，虽有心但力不足，欢迎各前端和后端甚至数据工程师来提交 PR！
 
@@ -78,9 +102,9 @@ https://github.com/zaigie/palworld-server-tool/assets/17232619/afdf485c-4b34-491
 <img src="./docs/img/pst-zh-m-1.png" width="30%" /><img src="./docs/img/pst-zh-m-2.png" width="30%" /><img src="./docs/img/pst-zh-m-3.png" width="30%" />
 </p>
 
-## 开启 REST API 与 RCON
+## 开启 REST API
 
-本项目必需开启服务器的 REST API 功能才能正常使用，而自定义 RCON 功能则依赖于 RCON 功能。[RCON命令参考](./docs/rconCommand_zh.txt)
+本项目必须启用服务器的官方 REST API 才能同步在线玩家并执行服务器管理操作。
 
 服务端 REST API 的字段与行为以 [Pocketpair 官方服务端文档](https://docs.palworldgame.com/category/rest-api) 为准。
 
@@ -90,9 +114,8 @@ https://github.com/zaigie/palworld-server-tool/assets/17232619/afdf485c-4b34-491
 
 ![ADMIN](./docs/img/admin-zh.png)
 
-再设置 **RCON** 和 **REST API**
+再启用 **REST API**
 
-![RCON_REST](./docs/img/rest-rcon-zh.png)
 
 ## 安装部署
 
@@ -122,11 +145,9 @@ https://github.com/zaigie/palworld-server-tool/assets/17232619/afdf485c-4b34-491
 
 首先点击以下按钮一键部署帕鲁私服：
 
-[![](https://raw.githubusercontent.com/labring-actions/templates/main/Deploy-on-Sealos.svg)](https://hzh.sealos.run/?uid=1b856tuu)
 
 然后点击以下按钮一键部署 palworld-server-tool：
 
-[![](https://raw.githubusercontent.com/labring-actions/templates/main/Deploy-on-Sealos.svg)](https://hzh.sealos.run/?openapp=system-template%3FtemplateName%3Dpalworld-management)
 
 ### 文件部署
 
@@ -140,7 +161,7 @@ https://github.com/zaigie/palworld-server-tool/assets/17232619/afdf485c-4b34-491
 
 ```bash
 # 下载 pst_{version}_{platform}_{arch}.tar.gz 文件并解压到 pst 目录
-mkdir -p pst && tar -xzf pst_v0.10.0_linux_x86_64.tar.gz -C pst
+mkdir -p pst && tar -xzf pst_v1.0.0_linux_x86_64.tar.gz -C pst
 ```
 
 ##### 配置
@@ -183,16 +204,6 @@ mkdir -p pst && tar -xzf pst_v0.10.0_linux_x86_64.tar.gz -C pst
      # 玩家离开服务器消息
      player_logout_message: "玩家 {username} 离开服务器!\n当前在线人数: {online_num}"
 
-   # RCON 相关设置
-   rcon:
-     # RCON 的地址和端口
-     address: "127.0.0.1:25575"
-     # 服务端设置的 AdminPassword
-     password: ""
-     # 服务器是否已开启 PalGuard 功能插件的 Base64 RCON 功能(需自行安装)
-     use_base64: false
-     # RCON 通信超时时间，推荐 <= 5
-     timeout: 5
 
    # REST API 相关配置
    rest:
@@ -267,7 +278,7 @@ kill $(ps aux | grep 'pst' | awk '{print $2}') | head -n 1
 
 ##### 下载解压
 
-解压 `pst_v0.10.0_windows_x86_64.zip` 到任意目录（推荐命名文件夹目录名称为 `pst`）
+解压 `pst_v1.0.0_windows_x86_64.zip` 到任意目录（推荐命名文件夹目录名称为 `pst`）
 
 ##### 配置
 
@@ -309,16 +320,6 @@ task:
   # 玩家离开服务器消息
   player_logout_message: "玩家 {username} 离开服务器!\n当前在线人数: {online_num}"
 
-# RCON 相关设置
-rcon:
-  # RCON 的地址和端口
-  address: "127.0.0.1:25575"
-  # 服务端设置的 RCON AdminPassword
-  password: ""
-  # 服务器是否已使用 PalGuard 功能插件的 Base64 RCON 功能(需自行安装)
-  use_base64: false
-  # RCON 通信超时时间，推荐 <= 5
-  timeout: 5
 
 # REST API 相关配置
 rest:
@@ -395,8 +396,6 @@ docker run -d --name pst \
 -v /path/to/your/Pal/Saved:/game \
 -v ./backups:/app/backups \
 -e WEB__PASSWORD="your web password" \
--e RCON__ADDRESS="172.17.0.1:25575" \
--e RCON__PASSWORD="your admin password" \
 -e REST__ADDRESS="http://127.0.0.1:8212" \
 -e REST__PASSWORD="your admin password" \
 -e SAVE__PATH="/game" \
@@ -429,10 +428,6 @@ touch pst.db
 |        WEB\_\_PASSWORD        |           ""            | 文本 |               Web 界面的管理员模式密码               |
 |          WEB\_\_PORT          |          8080           | 数字 |     **若非必要不建议修改，而是更改容器映射端口**     |
 |                               |                         |      |                                                      |
-|        RCON\_\_ADDRESS        |    "127.0.0.1:25575"    | 文本 | RCON 服务对应的地址，可以用容器网络 172.17.0.1:25575 |
-|       RCON\_\_PASSWORD        |           ""            | 文本 |           服务器配置文件中的 AdminPassword           |
-|      RCON\_\_USE_BASE64       |          false          | 布尔 | 服务器是否开启 PalGuard 功能插件的 Base64 RCON 功能  |
-|        RCON\_\_TIMEOUT        |            5            | 数字 |             单个请求 RCON 服务的超时时间             |
 |                               |                         |      |                                                      |
 |     TASK\_\_SYNC_INTERVAL     |           60            | 数字 |           请求服务器同步玩家在线数据的间隔           |
 |    TASK\_\_PLAYER_LOGGING     |          false          | 布尔 |                玩家登录/登出广播消息                 |
@@ -485,8 +480,6 @@ docker run -d --name pst \
 -p 8080:8080 \
 -v ./backups:/app/backups \
 -e WEB__PASSWORD="your password" \
--e RCON__ADDRESS="游戏服务器IP:25575" \
--e RCON__PASSWORD="your admin password" \
 -e REST__ADDRESS="http://游戏服务器IP:8212" \
 -e REST__PASSWORD="your admin password" \
 -e SAVE__PATH="http://游戏服务器IP:Agent端口/sync" \
@@ -515,10 +508,6 @@ touch pst.db
 |        WEB\_\_PASSWORD        |           ""            | 文本 |                          Web 界面的管理员模式密码                           |
 |          WEB\_\_PORT          |          8080           | 数字 |                **若非必要不建议修改，而是更改容器映射端口**                 |
 |                               |                         |      |                                                                             |
-|        RCON\_\_ADDRESS        |    "127.0.0.1:25575"    | 文本 |               RCON 服务对应的地址，一般为游戏服务器 IP:25575                |
-|       RCON\_\_PASSWORD        |           ""            | 文本 |                      服务器配置文件中的 AdminPassword                       |
-|      RCON\_\_USE_BASE64       |          false          | 布尔 |             服务器是否开启 PalGuard 功能插件的 Base64 RCON 功能             |
-|        RCON\_\_TIMEOUT        |            5            | 数字 |                        单个请求 RCON 服务的超时时间                         |
 |                               |                         |      |                                                                             |
 |     TASK\_\_SYNC_INTERVAL     |           60            | 数字 |                      请求服务器同步玩家在线数据的间隔                       |
 |    TASK\_\_PLAYER_LOGGING     |          false          | 布尔 |                            玩家登录/登出广播消息                            |
@@ -629,12 +618,11 @@ SAVE__PATH="docker://04b0a9af4288:/palworld/Pal/Saved"
 
 ## 感谢
 
-- [palworld-save-tools](https://github.com/cheahjs/palworld-save-tools) 提供了存档解析工具实现
+- [PalworldSaveTools](https://github.com/deafdudecomputers/PalworldSaveTools) 的 `palsav-flex` 提供当前存档解析、Oodle 压缩与重建能力
 - [palworld-server-toolkit](https://github.com/magicbear/palworld-server-toolkit) 提供了存档高性能解析部份实现
-- [pal-conf](https://github.com/Bluefissure/pal-conf) 提供了配置生成器页面
+- [pal-conf](https://github.com/Bluefissure/pal-conf) 提供最新服务端配置项与中文名称参考
 - [PalEdit](https://github.com/EternalWraith/PalEdit) 提供了最初的数据化思路及逻辑
-- [gorcon](https://github.com/gorcon/rcon) 提供的 RCON 请求/接收基础能力
 
 ## 许可证
 
-根据 [Apache2.0 许可证](LICENSE) 授权，任何转载请在 README 和文件部分标明！任何商用行为请务必告知！
+主程序根据 [Apache2.0 许可证](LICENSE) 授权。独立进程 `sav_cli` 包含 GPL-3.0-or-later 组件，其许可证随发行包以 `sav_cli-GPL-3.0.txt` 提供。

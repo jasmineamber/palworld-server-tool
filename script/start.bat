@@ -1,2 +1,4 @@
 @echo off
-start cmd /k .\pst.exe
+cd /d "%~dp0"
+.\pst.exe -config .\config.yaml
+pause

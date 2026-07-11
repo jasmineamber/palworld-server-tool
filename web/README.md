@@ -1,14 +1,15 @@
-# palworld-server-tool-web
+# Palworld Server Tool Web
 
-This template should help get you started developing with Vue 3 in Vite.
+Responsive React administration console for Palworld Server Tool.
 
-## Recommended IDE Setup
+## Stack
 
-[VSCode](https://code.visualstudio.com/) + [Volar](https://marketplace.visualstudio.com/items?itemName=Vue.volar) (and disable Vetur) + [TypeScript Vue Plugin (Volar)](https://marketplace.visualstudio.com/items?itemName=Vue.vscode-typescript-vue-plugin).
-
-## Customize configuration
-
-See [Vite Configuration Reference](https://vitejs.dev/config/).
+- React 19 and TypeScript
+- Vite 8
+- Tailwind CSS 4
+- shadcn/ui component source with Radix primitives
+- TanStack Query for API state
+- React Leaflet for the world map
 
 ## Project Setup
 
@@ -16,19 +17,19 @@ See [Vite Configuration Reference](https://vitejs.dev/config/).
 pnpm install
 ```
 
-### Compile and Hot-Reload for Development
+## Development
 
 ```sh
 pnpm dev
 ```
 
-### Compile and Minify for Production
+## Production build
 
 ```sh
 pnpm build
 ```
 
-### Lint with [ESLint](https://eslint.org/)
+## Lint
 
 ```sh
 pnpm lint

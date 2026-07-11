@@ -19,6 +19,8 @@ jobs:
           cache: true
       - name: Test map resource tooling
         run: python3 -m unittest test_map_down.py
+      - name: Check save parser sources
+        run: python3 -m py_compile sav_cli/*.py script/build_sav_cli.py
       - name: Test backend packages
         run: go test ./...
       - name: Vet backend packages
@@ -35,16 +37,16 @@ jobs:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
         with:
-          version: 9.15.9
+          version: 11.5.3
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           cache: pnpm
           cache-dependency-path: web/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
       - name: Audit frontend dependencies
         run: pnpm audit --audit-level low --registry=https://registry.npmjs.org/
       - name: Lint frontend
-        run: pnpm exec eslint . --ext .vue,.js,.jsx,.cjs,.mjs --ignore-path .gitignore
+        run: pnpm lint
       - name: Build frontend
         run: pnpm build
